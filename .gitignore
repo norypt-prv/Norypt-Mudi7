@@ -40,3 +40,6 @@ __pycache__/
 *.log
 scratch/
 tmp/
+
+# --- local workspace state ---
+
