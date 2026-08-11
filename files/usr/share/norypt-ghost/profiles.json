@@ -1,0 +1,101 @@
+{
+  "_comment": "Norypt Ghost device-profile catalog. One coherent real-device archetype per entry: the IMEI TAC vendor, the wifi_oui vendor, and the SSID brand are the same vendor by construction. TACs must be verified against a TAC database and sourced before a release build (validator --release enforces this). OUIs must be universally-administered (LA bit clear). wifi_oui values are drawn from oui_pool.json's router-class entries (AP/hotspot side); client_oui values are drawn from oui_pool.json's client-class entries (Apple/Intel/Dell/Samsung laptops+phones acting as upstream clients). Where a phone or hotspot vendor has no registered OUI block in oui_pool.json (Inseego, AVM), a generic router-class OUI stands in for the AP radio, matching real-world ODM WiFi-chip reuse across branded products.",
+  "profiles": [
+    {
+      "id": "netgear-nighthawk-m6-na",
+      "class": "hotspot", "region": "NA", "vendor": "NETGEAR",
+      "imei_tacs": [
+        { "tac": "86437503", "device": "Netgear Nighthawk M6 Pro (MR6450)",
+          "verified": false, "source": "TODO: verify against TAC DB" }
+      ],
+      "wifi_oui": ["A0:63:91", "C0:3F:0E", "20:E5:2A"],
+      "client_oui": ["3C:22:FB", "88:66:5A"],
+      "ssid_format": "NETGEAR-{4hex}",
+      "psk_format": "{10lower}",
+      "hostname_format": "Nighthawk-M6",
+      "dhcp_hostname_format": "android-{16hex}",
+      "bands": ["n2", "n5", "n25", "n41", "n66", "n71", "n77", "n78"],
+      "weight": 3
+    },
+    {
+      "id": "tplink-m7450-na",
+      "class": "hotspot", "region": "NA", "vendor": "TP-Link",
+      "imei_tacs": [
+        { "tac": "86225104", "device": "TP-Link M7450 5G Mobile WiFi",
+          "verified": false, "source": "TODO: verify against TAC DB" }
+      ],
+      "wifi_oui": ["EC:08:6B", "F0:9F:C2", "18:A6:F7"],
+      "client_oui": ["8C:85:90", "F8:0F:41"],
+      "ssid_format": "TP-LINK_{4hex}",
+      "psk_format": "{8digits}",
+      "hostname_format": "TP-Link-M7450",
+      "dhcp_hostname_format": "android-{12hex}",
+      "bands": ["n2", "n5", "n25", "n41", "n66", "n71", "n77", "n78"],
+      "weight": 3
+    },
+    {
+      "id": "inseego-mifi-x-pro-na",
+      "class": "hotspot", "region": "NA", "vendor": "Inseego",
+      "imei_tacs": [
+        { "tac": "86614103", "device": "Inseego MiFi X Pro 5G",
+          "verified": false, "source": "TODO: verify against TAC DB" }
+      ],
+      "wifi_oui": ["58:EF:68", "FC:65:DE"],
+      "client_oui": ["18:CC:18", "8C:C8:4B"],
+      "ssid_format": "INSEEGO-{4hex}",
+      "psk_format": "{10digits}",
+      "hostname_format": "MiFi-X-PRO-5G",
+      "dhcp_hostname_format": "android-{10hex}",
+      "bands": ["n2", "n5", "n25", "n41", "n66", "n71", "n77", "n78"],
+      "weight": 3
+    },
+    {
+      "id": "samsung-galaxy-s24-ultra-eu",
+      "class": "phone", "region": "EU", "vendor": "Samsung",
+      "imei_tacs": [
+        { "tac": "35812092", "device": "Samsung Galaxy S24 Ultra (SM-S928B, EU)",
+          "verified": false, "source": "TODO: verify against TAC DB" }
+      ],
+      "wifi_oui": ["00:25:9C", "88:15:44"],
+      "client_oui": ["18:CC:18", "8C:C8:4B", "70:28:8B"],
+      "ssid_format": "HOME-{4hex}",
+      "psk_format": "{8digits}",
+      "hostname_format": "Galaxy-S24-Ultra",
+      "dhcp_hostname_format": "Galaxy-S24-{4hex}",
+      "bands": ["n1", "n3", "n7", "n8", "n20", "n28", "n78"],
+      "weight": 2
+    },
+    {
+      "id": "apple-iphone-15-pro-eu",
+      "class": "phone", "region": "EU", "vendor": "Apple",
+      "imei_tacs": [
+        { "tac": "35298167", "device": "Apple iPhone 15 Pro (A2848, EU)",
+          "verified": false, "source": "TODO: verify against TAC DB" }
+      ],
+      "wifi_oui": ["F4:F5:DB", "88:15:44"],
+      "client_oui": ["AC:DE:48", "40:98:AD"],
+      "ssid_format": "HOME-{4hex}",
+      "psk_format": "{10lower}",
+      "hostname_format": "iPhone-15-Pro",
+      "dhcp_hostname_format": "iPhone-{4hex}",
+      "bands": ["n1", "n3", "n7", "n8", "n20", "n28", "n78"],
+      "weight": 2
+    },
+    {
+      "id": "avm-fritzbox-6850-5g-eu",
+      "class": "hotspot", "region": "EU", "vendor": "AVM",
+      "imei_tacs": [
+        { "tac": "86751234", "device": "AVM FRITZ!Box 6850 5G",
+          "verified": false, "source": "TODO: verify against TAC DB" }
+      ],
+      "wifi_oui": ["48:F8:B3", "30:23:03", "C0:56:27"],
+      "client_oui": ["F8:0F:41", "10:65:30", "28:16:AD"],
+      "ssid_format": "AVM-FRITZ-{4hex}",
+      "psk_format": "{16digits}",
+      "hostname_format": "FRITZ-Box-6850-5G",
+      "dhcp_hostname_format": "FRITZ-Client-{6hex}",
+      "bands": ["n1", "n3", "n7", "n8", "n20", "n28", "n78"],
+      "weight": 3
+    }
+  ]
+}
