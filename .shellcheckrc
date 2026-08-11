@@ -1,0 +1,4 @@
+# Target runtime is busybox ash (OpenWrt), which supports `local`, and the
+# scripts are sourced/run under it — not strict POSIX sh. Silence the
+# POSIX-only-dialect warnings that do not apply to this target.
+disable=SC3043
