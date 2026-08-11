@@ -56,7 +56,7 @@ define Package/norypt-ghost/install
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/etc/init.d/norypt-ghost-wireless      $(1)/etc/init.d/norypt-ghost-wireless
 	$(INSTALL_BIN) ./files/etc/init.d/norypt-ghost-sim-swap      $(1)/etc/init.d/norypt-ghost-sim-swap
-	$(INSTALL_BIN) ./files/etc/init.d/norypt-ghost-volatile-macs $(1)/etc/init.d/norypt-ghost-volatile-macs
+	$(INSTALL_BIN) ./files/etc/init.d/norypt-ghost-clean      $(1)/etc/init.d/norypt-ghost-clean
 	$(INSTALL_BIN) ./files/etc/init.d/norypt-ghost-touch         $(1)/etc/init.d/norypt-ghost-touch
 
 	$(INSTALL_DIR) $(1)/usr/share/norypt-ghost
@@ -148,7 +148,7 @@ if [ -f /etc/glversion ]; then
 	esac
 fi
 
-# Stop gl_clients before volatile-macs mounts tmpfs over its database directory.
+# Stop gl_clients before norypt-ghost-clean mounts tmpfs over its database directory.
 [ -x /etc/init.d/gl_clients ] && /etc/init.d/gl_clients stop 2>/dev/null
 
 exit 0
@@ -165,7 +165,7 @@ done
 uci -q commit wireless
 
 # Enable all norypt-ghost init.d services.
-/etc/init.d/norypt-ghost-volatile-macs enable
+/etc/init.d/norypt-ghost-clean enable
 /etc/init.d/norypt-ghost-wireless enable
 /etc/init.d/norypt-ghost-sim-swap enable
 
@@ -176,8 +176,8 @@ if [ "$$(uci -q get norypt-ghost.options.touch_enabled 2>/dev/null)" != "0" ]; t
 	/etc/init.d/norypt-ghost-touch start
 fi
 
-# Start volatile-macs immediately so the client database moves to RAM.
-/etc/init.d/norypt-ghost-volatile-macs start
+# Start norypt-ghost-clean immediately so the client database moves to RAM.
+/etc/init.d/norypt-ghost-clean start
 
 # Restart gl_clients against the now-tmpfs-backed database directory.
 [ -x /etc/init.d/gl_clients ] && /etc/init.d/gl_clients start 2>/dev/null
@@ -198,12 +198,12 @@ define Package/norypt-ghost/prerm
 /etc/init.d/norypt-ghost-touch stop 2>/dev/null
 /etc/init.d/norypt-ghost-wireless stop 2>/dev/null
 /etc/init.d/norypt-ghost-sim-swap stop 2>/dev/null
-/etc/init.d/norypt-ghost-volatile-macs stop 2>/dev/null
+/etc/init.d/norypt-ghost-clean stop 2>/dev/null
 
 /etc/init.d/norypt-ghost-touch disable 2>/dev/null
 /etc/init.d/norypt-ghost-wireless disable 2>/dev/null
 /etc/init.d/norypt-ghost-sim-swap disable 2>/dev/null
-/etc/init.d/norypt-ghost-volatile-macs disable 2>/dev/null
+/etc/init.d/norypt-ghost-clean disable 2>/dev/null
 
 # Restore factory IMEIs, MACs, SSIDs, and hostname while the binary still exists.
 [ -x /usr/bin/norypt-ghost ] && /usr/bin/norypt-ghost restore 2>/dev/null

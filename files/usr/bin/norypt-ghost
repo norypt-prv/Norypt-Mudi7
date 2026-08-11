@@ -288,7 +288,7 @@ _run_check() {
     echo ""
     echo "Services:"
     local _svc
-    for _svc in norypt-ghost-volatile-macs norypt-ghost-wireless norypt-ghost-sim-swap; do
+    for _svc in norypt-ghost-clean norypt-ghost-wireless norypt-ghost-sim-swap; do
         if ls /etc/rc.d/S*"${_svc}" >/dev/null 2>&1; then
             _pass "${_svc} enabled"
         else
@@ -304,11 +304,9 @@ _run_check() {
     else
         _warn "norypt-ghost-touch disabled (touchscreen trigger off)"
     fi
-    if mount | grep -q "tmpfs on /etc/oui-tertf "; then
-        _pass "client-MAC database is RAM-backed (tmpfs mounted)"
-    else
-        _fail "tmpfs NOT mounted on /etc/oui-tertf — client MACs are hitting flash"
-    fi
+    # shellcheck source=/dev/null
+    . /lib/norypt-ghost/clean.sh
+    CLEAN_STATUS
 
     echo ""
     echo "State:"

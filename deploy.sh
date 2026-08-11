@@ -24,15 +24,15 @@ ssh "$HOST" 'chmod +x /usr/bin/norypt-ghost /usr/bin/norypt-ghost-touch'
 # init.d services
 scp -O "$REPO/files/etc/init.d/norypt-ghost-wireless"      "$HOST:/etc/init.d/norypt-ghost-wireless"
 scp -O "$REPO/files/etc/init.d/norypt-ghost-sim-swap"      "$HOST:/etc/init.d/norypt-ghost-sim-swap"
-scp -O "$REPO/files/etc/init.d/norypt-ghost-volatile-macs" "$HOST:/etc/init.d/norypt-ghost-volatile-macs"
+scp -O "$REPO/files/etc/init.d/norypt-ghost-clean"         "$HOST:/etc/init.d/norypt-ghost-clean"
 scp -O "$REPO/files/etc/init.d/norypt-ghost-touch"         "$HOST:/etc/init.d/norypt-ghost-touch"
 ssh "$HOST" 'chmod +x /etc/init.d/norypt-ghost-wireless /etc/init.d/norypt-ghost-sim-swap \
-        /etc/init.d/norypt-ghost-volatile-macs /etc/init.d/norypt-ghost-touch \
+        /etc/init.d/norypt-ghost-clean /etc/init.d/norypt-ghost-touch \
     && rm -f /etc/rc.d/S*norypt-ghost-wireless /etc/rc.d/S*norypt-ghost-sim-swap \
-        /etc/rc.d/S*norypt-ghost-volatile-macs /etc/rc.d/S*norypt-ghost-touch \
+        /etc/rc.d/S*norypt-ghost-clean /etc/rc.d/S*norypt-ghost-touch \
     && /etc/init.d/norypt-ghost-wireless enable \
     && /etc/init.d/norypt-ghost-sim-swap enable \
-    && /etc/init.d/norypt-ghost-volatile-macs enable \
+    && /etc/init.d/norypt-ghost-clean enable \
     && /etc/init.d/norypt-ghost-touch enable'
 
 # Data pools and splash frames

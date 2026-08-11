@@ -1,0 +1,21 @@
+#!/bin/sh /etc/rc.common
+# SPDX-License-Identifier: GPL-2.0-only
+# Norypt Ghost — ephemeral state service. Runs before gl_clients / dnsmasq /
+# gl-tertf so those daemons write to RAM from their first write.
+
+# shellcheck disable=SC2034
+START=9
+# shellcheck disable=SC2034
+STOP=99
+
+start() {
+    # shellcheck source=/dev/null
+    . /lib/norypt-ghost/clean.sh
+    CLEAN_APPLY
+}
+
+stop() {
+    # shellcheck source=/dev/null
+    . /lib/norypt-ghost/clean.sh
+    CLEAN_WIPE
+}

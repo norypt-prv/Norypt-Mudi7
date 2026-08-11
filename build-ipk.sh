@@ -58,7 +58,7 @@ install -m 0755 "$REPO/files/usr/libexec/norypt-ghost"              "$STAGING/us
 install -d "$STAGING/etc/init.d"
 install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-wireless"      "$STAGING/etc/init.d/norypt-ghost-wireless"
 install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-sim-swap"      "$STAGING/etc/init.d/norypt-ghost-sim-swap"
-install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-volatile-macs" "$STAGING/etc/init.d/norypt-ghost-volatile-macs"
+install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-clean"         "$STAGING/etc/init.d/norypt-ghost-clean"
 install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-touch"         "$STAGING/etc/init.d/norypt-ghost-touch"
 
 install -d "$STAGING/usr/share/norypt-ghost"
@@ -171,7 +171,7 @@ for _radio in wifi0 wifi1 wifi2; do
 done
 uci -q commit wireless
 
-/etc/init.d/norypt-ghost-volatile-macs enable
+/etc/init.d/norypt-ghost-clean enable
 /etc/init.d/norypt-ghost-wireless enable
 /etc/init.d/norypt-ghost-sim-swap enable
 
@@ -182,7 +182,7 @@ if [ "$(uci -q get norypt-ghost.options.touch_enabled 2>/dev/null)" != "0" ]; th
     /etc/init.d/norypt-ghost-touch start
 fi
 
-/etc/init.d/norypt-ghost-volatile-macs start
+/etc/init.d/norypt-ghost-clean start
 [ -x /etc/init.d/gl_clients ] && /etc/init.d/gl_clients start 2>/dev/null
 
 /usr/bin/norypt-ghost install
@@ -202,12 +202,12 @@ cat > "$CONTROL_DIR/prerm" <<'PRERM'
 /etc/init.d/norypt-ghost-touch stop 2>/dev/null
 /etc/init.d/norypt-ghost-wireless stop 2>/dev/null
 /etc/init.d/norypt-ghost-sim-swap stop 2>/dev/null
-/etc/init.d/norypt-ghost-volatile-macs stop 2>/dev/null
+/etc/init.d/norypt-ghost-clean stop 2>/dev/null
 
 /etc/init.d/norypt-ghost-touch disable 2>/dev/null
 /etc/init.d/norypt-ghost-wireless disable 2>/dev/null
 /etc/init.d/norypt-ghost-sim-swap disable 2>/dev/null
-/etc/init.d/norypt-ghost-volatile-macs disable 2>/dev/null
+/etc/init.d/norypt-ghost-clean disable 2>/dev/null
 
 [ -x /usr/bin/norypt-ghost ] && /usr/bin/norypt-ghost restore 2>/dev/null
 exit 0
