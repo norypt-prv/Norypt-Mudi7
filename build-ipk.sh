@@ -260,7 +260,14 @@ cat > "$CONTROL_DIR/prerm" <<'PRERM'
 /etc/init.d/norypt-ghost-sim-swap disable 2>/dev/null
 /etc/init.d/norypt-ghost-clean disable 2>/dev/null
 
-[ -x /usr/bin/norypt-ghost ] && /usr/bin/norypt-ghost restore 2>/dev/null
+# Sealed factory state cannot be restored non-interactively (no passphrase
+# available here) — say so loudly instead of silently leaving the device on
+# its rotated identity. Unsealed devices keep the exact prior behavior.
+if [ "$(uci -q get norypt-ghost.factory.sealed 2>/dev/null)" = "1" ]; then
+    echo "norypt-ghost: factory state is SEALED — the modem KEEPS its current identity. To restore the original identity, run 'norypt-ghost restore' with your passphrase BEFORE or AFTER removal."
+else
+    [ -x /usr/bin/norypt-ghost ] && /usr/bin/norypt-ghost restore 2>/dev/null
+fi
 exit 0
 PRERM
 
@@ -283,7 +290,7 @@ rm -f /etc/norypt-ghost.last_imei_rotate \
       /etc/norypt-ghost.last_wireless_rotate \
       /etc/norypt-ghost.sim-swap-pending
 
-echo "norypt-ghost: uninstalled. Factory identity restored."
+echo "norypt-ghost: uninstalled."
 exit 0
 POSTRM
 

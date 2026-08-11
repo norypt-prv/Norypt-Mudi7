@@ -1,17 +1,23 @@
 # SPDX-License-Identifier: GPL-2.0-only
-"""Pins the quote-stripping parse logic used by the sealed-restore preamble
-in files/usr/bin/norypt-ghost (the `restore)` case, Part 2: unseal-on-restore).
+"""Pins the quote-stripping/unescaping parse logic used by the sealed-restore
+preamble in files/usr/bin/norypt-ghost (the `restore)` case, Part 2:
+unseal-on-restore).
 
 `uci show norypt-ghost.factory` emits lines like:
     norypt-ghost.factory.wifi2g_ssid='My Home WiFi'
-which the preamble splits on the first '=' and then strips one leading and
-one trailing single-quote from the value, before loading it back into the
-uncommitted uci delta with `uci set KEY=VALUE`.
+and, when a value contains an embedded single quote, escapes it as the
+4-character sequence '\'' (apostrophe backslash apostrophe apostrophe), e.g.
+a value "Joe's WiFi" is emitted as:
+    norypt-ghost.factory.wifi2g_key='Joe'\''s WiFi'
+The preamble splits each line on the first '=', strips one leading and one
+trailing single-quote from the value, then unescapes any '\'' sequences back
+to a literal ' before loading the value into the uncommitted uci delta with
+`uci set KEY=VALUE`.
 
 This test exercises that exact shell fragment in isolation (no uci, no
-sourcing norypt-ghost) so a regression in the split/strip logic — e.g. one
-that mangles a value containing a space, such as an SSID — is caught on the
-host without needing a device.
+sourcing norypt-ghost) so a regression in the split/strip/unescape logic —
+e.g. one that mangles a value containing a space or an apostrophe — is caught
+on the host without needing a device.
 """
 import subprocess
 import unittest
@@ -25,8 +31,24 @@ while IFS= read -r _ng_line; do
     case "$_ng_line" in norypt-ghost.factory.*=*) ;; *) continue ;; esac
     _ng_k="${_ng_line%%=*}"
     _ng_v="${_ng_line#*=}"
-    # uci show wraps values in single quotes; strip one leading/trailing '.
+    # uci show wraps values in single quotes and escapes an embedded ' as
+    # '\''; strip the outer quotes, then unescape that sequence back to a
+    # literal ' (e.g. an SSID like "Joe's WiFi").
     _ng_v="${_ng_v#\'}"; _ng_v="${_ng_v%\'}"
+    _ng_out=""
+    while :; do
+        case "$_ng_v" in
+            *"'\''"*)
+                _ng_out="${_ng_out}${_ng_v%%"'\''"*}'"
+                _ng_v="${_ng_v#*"'\''"}"
+                ;;
+            *)
+                _ng_out="${_ng_out}${_ng_v}"
+                break
+                ;;
+        esac
+    done
+    _ng_v="$_ng_out"
     printf '%s\t%s\n' "$_ng_k" "$_ng_v"
 done
 '''
@@ -79,6 +101,14 @@ class TestSealFactoryParse(unittest.TestCase):
         self.assertEqual(
             out["norypt-ghost.factory.guest2g_key"], "correct horse battery"
         )
+
+    def test_value_with_embedded_apostrophe(self):
+        # uci show escapes an internal ' as the 4-char sequence '\'' — a
+        # naive "strip one leading/trailing quote" parser recovers the
+        # mangled "Joe'\''s WiFi" instead of "Joe's WiFi". Pin the unescape.
+        raw = "norypt-ghost.factory.wifi2g_key='Joe'\\''s WiFi'\n"
+        out = run_parse(raw)
+        self.assertEqual(out["norypt-ghost.factory.wifi2g_key"], "Joe's WiFi")
 
     def test_sealed_key_itself_round_trips_if_present(self):
         # Not expected in real blobs (Part 1 strips .sealed before encrypting),

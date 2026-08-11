@@ -626,6 +626,14 @@ case "$cmd" in
         # delta so the existing _get_factory reads work unchanged. The plaintext
         # is never committed, so it never reaches flash; we revert it at the end.
         if [ "$(_get_factory sealed)" = "1" ]; then
+            # Sealed restore fundamentally needs a human to type the passphrase.
+            # Non-TTY callers (prerm, LuCI's backgrounded rpcd restore) would
+            # otherwise block forever on `read`, or worse, decrypt an empty
+            # passphrase silently. Fail loud instead.
+            if [ ! -t 0 ]; then
+                echo "norypt-ghost: factory state is SEALED — run 'norypt-ghost restore' from an interactive SSH session to enter the passphrase. Not restoring now." >&2
+                exit 1
+            fi
             # shellcheck source=/dev/null
             . /lib/norypt-ghost/seal.sh
             _ng_blob="$(_get_factory blob)"
@@ -640,8 +648,24 @@ case "$cmd" in
                 case "$_ng_line" in norypt-ghost.factory.*=*) ;; *) continue ;; esac
                 _ng_k="${_ng_line%%=*}"
                 _ng_v="${_ng_line#*=}"
-                # uci show wraps values in single quotes; strip one leading/trailing '.
+                # uci show wraps values in single quotes and escapes an embedded
+                # ' as '\''; strip the outer quotes, then unescape that sequence
+                # back to a literal ' (e.g. an SSID like "Joe's WiFi").
                 _ng_v="${_ng_v#\'}"; _ng_v="${_ng_v%\'}"
+                _ng_out=""
+                while :; do
+                    case "$_ng_v" in
+                        *"'\''"*)
+                            _ng_out="${_ng_out}${_ng_v%%"'\''"*}'"
+                            _ng_v="${_ng_v#*"'\''"}"
+                            ;;
+                        *)
+                            _ng_out="${_ng_out}${_ng_v}"
+                            break
+                            ;;
+                    esac
+                done
+                _ng_v="$_ng_out"
                 uci -c /etc/config set "${_ng_k}=${_ng_v}"
             done <<EOF
 $_ng_plain
