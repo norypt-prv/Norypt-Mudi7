@@ -47,6 +47,10 @@ install -d "$STAGING/lib/norypt-ghost"
 install -m 0644 "$REPO/files/lib/norypt-ghost/functions.sh"         "$STAGING/lib/norypt-ghost/functions.sh"
 install -m 0644 "$REPO/files/lib/norypt-ghost/imei_generate.lua"    "$STAGING/lib/norypt-ghost/imei_generate.lua"
 install -m 0644 "$REPO/files/lib/norypt-ghost/luhn.lua"             "$STAGING/lib/norypt-ghost/luhn.lua"
+install -m 0644 "$REPO/files/lib/norypt-ghost/profile.sh"           "$STAGING/lib/norypt-ghost/profile.sh"
+install -m 0644 "$REPO/files/lib/norypt-ghost/identity.sh"          "$STAGING/lib/norypt-ghost/identity.sh"
+install -m 0644 "$REPO/files/lib/norypt-ghost/clean.sh"             "$STAGING/lib/norypt-ghost/clean.sh"
+install -m 0644 "$REPO/files/lib/norypt-ghost/seal.sh"              "$STAGING/lib/norypt-ghost/seal.sh"
 
 install -d "$STAGING/usr/bin"
 install -m 0755 "$REPO/files/usr/bin/norypt-ghost"                  "$STAGING/usr/bin/norypt-ghost"
@@ -58,12 +62,14 @@ install -m 0755 "$REPO/files/usr/libexec/norypt-ghost"              "$STAGING/us
 install -d "$STAGING/etc/init.d"
 install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-wireless"      "$STAGING/etc/init.d/norypt-ghost-wireless"
 install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-sim-swap"      "$STAGING/etc/init.d/norypt-ghost-sim-swap"
-install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-volatile-macs" "$STAGING/etc/init.d/norypt-ghost-volatile-macs"
+install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-clean"         "$STAGING/etc/init.d/norypt-ghost-clean"
 install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-touch"         "$STAGING/etc/init.d/norypt-ghost-touch"
+install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-ttl"           "$STAGING/etc/init.d/norypt-ghost-ttl"
 
 install -d "$STAGING/usr/share/norypt-ghost"
 install -m 0644 "$REPO/files/usr/share/norypt-ghost/tac_pool.json"  "$STAGING/usr/share/norypt-ghost/tac_pool.json"
 install -m 0644 "$REPO/files/usr/share/norypt-ghost/oui_pool.json"  "$STAGING/usr/share/norypt-ghost/oui_pool.json"
+install -m 0644 "$REPO/files/usr/share/norypt-ghost/profiles.json"  "$STAGING/usr/share/norypt-ghost/profiles.json"
 
 install -d "$STAGING/usr/share/norypt-ghost/screens"
 for _f in "$REPO/files/usr/share/norypt-ghost/screens/"*.rgb565; do
@@ -156,6 +162,13 @@ if [ -f /etc/glversion ]; then
     esac
 fi
 
+# Crypto probe: sealing (Task E2) needs openssl. Non-fatal — factory state
+# just stays plain, same as every install before sealing existed.
+if ! command -v openssl >/dev/null 2>&1; then
+    echo "norypt-ghost: openssl not found — factory state will be stored UNSEALED."
+    echo "  To enable passphrase-sealed storage: opkg install openssl-util, then reinstall norypt-ghost."
+fi
+
 [ -x /etc/init.d/gl_clients ] && /etc/init.d/gl_clients stop 2>/dev/null
 exit 0
 PREINST
@@ -171,9 +184,10 @@ for _radio in wifi0 wifi1 wifi2; do
 done
 uci -q commit wireless
 
-/etc/init.d/norypt-ghost-volatile-macs enable
+/etc/init.d/norypt-ghost-clean enable
 /etc/init.d/norypt-ghost-wireless enable
 /etc/init.d/norypt-ghost-sim-swap enable
+/etc/init.d/norypt-ghost-ttl enable
 
 # Touchscreen trigger: respect a preference saved by a previous install
 # (LuCI toggle persists it to UCI); default to enabled on fresh installs.
@@ -182,8 +196,53 @@ if [ "$(uci -q get norypt-ghost.options.touch_enabled 2>/dev/null)" != "0" ]; th
     /etc/init.d/norypt-ghost-touch start
 fi
 
-/etc/init.d/norypt-ghost-volatile-macs start
+/etc/init.d/norypt-ghost-clean start
+/etc/init.d/norypt-ghost-ttl start
 [ -x /etc/init.d/gl_clients ] && /etc/init.d/gl_clients start 2>/dev/null
+
+# Offer to seal the factory identity (IMEIs/MACs/SSIDs/Wi-Fi keys) behind a
+# passphrase before capture runs. Only on first install (no factory section
+# yet) and only when crypto is available and factory_mode hasn't opted out.
+# Non-interactive installs skip the prompt entirely — factory state stays
+# plain, exactly as it did before sealing existed.
+if command -v openssl >/dev/null 2>&1 \
+    && [ "$(uci -q get norypt-ghost.options.factory_mode 2>/dev/null)" != "plain" ] \
+    && ! uci -q get norypt-ghost.factory >/dev/null 2>&1; then
+    if [ -t 0 ]; then
+        echo "norypt-ghost: factory identity can be sealed behind a passphrase."
+        echo "Leave blank to store it in plain UCI, as before."
+        _ng_ok=0
+        _ng_tries=0
+        while [ "$_ng_ok" = "0" ] && [ "$_ng_tries" -lt 3 ]; do
+            _ng_tries=$((_ng_tries + 1))
+            printf "Passphrase (blank = plain): "
+            stty -echo 2>/dev/null; read -r _ng_p1; stty echo 2>/dev/null; echo
+            if [ -z "$_ng_p1" ]; then
+                echo "norypt-ghost: leaving factory state unsealed."
+                _ng_ok=1
+            else
+                printf "Confirm passphrase: "
+                stty -echo 2>/dev/null; read -r _ng_p2; stty echo 2>/dev/null; echo
+                if [ "$_ng_p1" = "$_ng_p2" ]; then
+                    umask 077
+                    printf '%s' "$_ng_p1" > /tmp/norypt-ghost.seal-pass
+                    chmod 0600 /tmp/norypt-ghost.seal-pass
+                    _ng_ok=1
+                else
+                    echo "norypt-ghost: passphrases did not match — try again."
+                fi
+            fi
+            unset _ng_p1 _ng_p2
+        done
+        if [ "$_ng_ok" != "1" ]; then
+            echo "norypt-ghost: too many mismatches — leaving factory state unsealed."
+        fi
+        unset _ng_ok _ng_tries
+    else
+        echo "norypt-ghost: non-interactive install — factory state will be stored unsealed."
+        echo "  Re-run 'norypt-ghost install' from an interactive shell before the factory section exists to seal it."
+    fi
+fi
 
 /usr/bin/norypt-ghost install
 
@@ -202,14 +261,23 @@ cat > "$CONTROL_DIR/prerm" <<'PRERM'
 /etc/init.d/norypt-ghost-touch stop 2>/dev/null
 /etc/init.d/norypt-ghost-wireless stop 2>/dev/null
 /etc/init.d/norypt-ghost-sim-swap stop 2>/dev/null
-/etc/init.d/norypt-ghost-volatile-macs stop 2>/dev/null
+/etc/init.d/norypt-ghost-clean stop 2>/dev/null
+/etc/init.d/norypt-ghost-ttl stop 2>/dev/null
 
 /etc/init.d/norypt-ghost-touch disable 2>/dev/null
 /etc/init.d/norypt-ghost-wireless disable 2>/dev/null
 /etc/init.d/norypt-ghost-sim-swap disable 2>/dev/null
-/etc/init.d/norypt-ghost-volatile-macs disable 2>/dev/null
+/etc/init.d/norypt-ghost-clean disable 2>/dev/null
+/etc/init.d/norypt-ghost-ttl disable 2>/dev/null
 
-[ -x /usr/bin/norypt-ghost ] && /usr/bin/norypt-ghost restore 2>/dev/null
+# Sealed factory state cannot be restored non-interactively (no passphrase
+# available here) — say so loudly instead of silently leaving the device on
+# its rotated identity. Unsealed devices keep the exact prior behavior.
+if [ "$(uci -q get norypt-ghost.factory.sealed 2>/dev/null)" = "1" ]; then
+    echo "norypt-ghost: factory state is SEALED — the modem KEEPS its current identity. To restore the original identity, run 'norypt-ghost restore' with your passphrase BEFORE or AFTER removal."
+else
+    [ -x /usr/bin/norypt-ghost ] && /usr/bin/norypt-ghost restore 2>/dev/null
+fi
 exit 0
 PRERM
 
@@ -232,7 +300,7 @@ rm -f /etc/norypt-ghost.last_imei_rotate \
       /etc/norypt-ghost.last_wireless_rotate \
       /etc/norypt-ghost.sim-swap-pending
 
-echo "norypt-ghost: uninstalled. Factory identity restored."
+echo "norypt-ghost: uninstalled."
 exit 0
 POSTRM
 

@@ -14,10 +14,15 @@
 
 . /lib/norypt-ghost/functions.sh   # provides _opt_enabled and the RANDOMIZE_* helpers
 
+# shellcheck disable=SC2034
 START=10
+# shellcheck disable=SC2034
 STOP=99
 
 start() {
+    # A staged full-identity (new-identity) already wrote a coherent wireless
+    # identity to UCI — do not clobber it with an independent random one.
+    [ -f /etc/norypt-ghost.identity-pending ] && return 0
     _opt_enabled randomize_on_boot || return 0
     _opt_enabled randomize_mac      && RANDOMIZE_MACADDR
     _opt_enabled randomize_ssid     && RANDOMIZE_SSID

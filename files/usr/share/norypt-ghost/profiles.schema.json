@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "SPDX-License-Identifier: GPL-2.0-only",
+  "type": "object",
+  "required": ["profiles"],
+  "properties": {
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "class",
+          "region",
+          "vendor",
+          "imei_tacs",
+          "wifi_oui",
+          "ssid_format",
+          "psk_format",
+          "hostname_format",
+          "dhcp_hostname_format"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "class": {
+            "type": "string",
+            "enum": ["hotspot", "phone"]
+          },
+          "region": {
+            "type": "string",
+            "enum": ["EU", "NA"]
+          },
+          "vendor": {
+            "type": "string",
+            "minLength": 1
+          },
+          "imei_tacs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["tac", "verified", "source"],
+              "properties": {
+                "tac": {
+                  "type": "string",
+                  "pattern": "^\\d{8}$"
+                },
+                "verified": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "device": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "wifi_oui": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}$"
+            }
+          },
+          "client_oui": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}$"
+            }
+          },
+          "ssid_format": {
+            "type": "string",
+            "minLength": 1
+          },
+          "psk_format": {
+            "type": "string",
+            "minLength": 1
+          },
+          "hostname_format": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dhcp_hostname_format": {
+            "type": "string",
+            "minLength": 1
+          },
+          "bands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "weight": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  }
+}

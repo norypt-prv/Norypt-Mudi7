@@ -19,6 +19,8 @@
 #   --static              shorthand: both slots static
 
 . /lib/norypt-ghost/functions.sh
+# shellcheck source=/dev/null
+. /lib/norypt-ghost/identity.sh
 
 FACTORY_CFG=/etc/config/norypt-ghost
 
@@ -103,6 +105,23 @@ _save_factory_state() {
         uci -c /etc/config set norypt-ghost.factory.guest6g_ssid="$guest6g_ssid"
         uci -c /etc/config set norypt-ghost.factory.hostname="$hostname"
 
+        # Wired MAC (first device that has one) + WAN DHCP hostname — captured
+        # here too, so restore/uninstall can revert what RANDOMIZE_WIRED_MAC and
+        # IDENTITY_STAGE rotate on network.@device[*] and network.wan.
+        local wired_mac wan_hostname _dev_i
+        wired_mac=""
+        _dev_i=0
+        while :; do
+            uci -q get "network.@device[$_dev_i]" >/dev/null 2>&1 || break
+            if [ -z "$wired_mac" ]; then
+                wired_mac=$(uci -q get "network.@device[$_dev_i].macaddr" 2>/dev/null)
+            fi
+            _dev_i=$(( _dev_i + 1 ))
+        done
+        wan_hostname=$(uci -q get network.wan.hostname 2>/dev/null)
+        [ -n "$wired_mac" ] && uci -c /etc/config set norypt-ghost.factory.wired_mac="$wired_mac"
+        [ -n "$wan_hostname" ] && uci -c /etc/config set norypt-ghost.factory.wan_hostname="$wan_hostname"
+
         echo "  IMEI (slot 1):   $slot1_imei"
         echo "  IMEI (slot 2):   $slot2_imei"
         echo "  WiFi MAC (2.4g): $wifi2g_mac"
@@ -147,6 +166,44 @@ _save_factory_state() {
 
     uci -c /etc/config commit norypt-ghost
     echo "norypt-ghost: factory state saved to $FACTORY_CFG"
+
+    _seal_factory_if_requested
+}
+
+# Seal the factory section behind a passphrase, if requested and available.
+# Purely additive: no-op when sealing isn't active, or the section is already
+# sealed, or no passphrase was staged by postinst. When plain, behavior (and
+# the on-disk factory.* keys) is byte-identical to before this function existed.
+_seal_factory_if_requested() {
+    # shellcheck source=/dev/null
+    . /lib/norypt-ghost/seal.sh
+    [ "$(SEAL_MODE)" = "sealed" ] || return 0
+    [ "$(_get_factory sealed)" = "1" ] && return 0
+
+    local pass
+    pass="$(cat /tmp/norypt-ghost.seal-pass 2>/dev/null)"
+    if [ -z "$pass" ]; then
+        logger -t norypt-ghost "seal: no passphrase — leaving plain"
+        return 0
+    fi
+
+    local tmp
+    tmp="/tmp/ng.factory.$$"
+    uci -c /etc/config show norypt-ghost.factory 2>/dev/null | grep -v '\.sealed=' > "$tmp"
+
+    local blob
+    blob="$(SEAL_ENCRYPT "$tmp" "$pass")"
+    rm -f "$tmp" /tmp/norypt-ghost.seal-pass
+
+    local k
+    for k in $(uci -c /etc/config show norypt-ghost.factory 2>/dev/null | sed -n 's/^norypt-ghost\.factory\.\([^=]*\)=.*/\1/p'); do
+        [ "$k" = "sealed" ] && continue
+        uci -c /etc/config delete "norypt-ghost.factory.$k" 2>/dev/null
+    done
+    uci -c /etc/config set norypt-ghost.factory.sealed=1
+    uci -c /etc/config set norypt-ghost.factory.blob="$blob"
+    uci -c /etc/config commit norypt-ghost
+    logger -t norypt-ghost "factory state sealed"
 }
 
 # ── Status ────────────────────────────────────────────────────────────────────
@@ -273,7 +330,7 @@ _run_check() {
     echo ""
     echo "Splash frames:"
     local _frame _missing=0
-    for _frame in rotating done simswap restoring error warning; do
+    for _frame in rotating "done" simswap restoring error warning; do
         [ -f "${_SCREENS_DIR}/${_frame}.rgb565" ] || { _fail "frame missing: ${_frame}.rgb565"; _missing=1; }
     done
     [ "$_missing" = "0" ] && _pass "all 6 frames present"
@@ -286,7 +343,7 @@ _run_check() {
     echo ""
     echo "Services:"
     local _svc
-    for _svc in norypt-ghost-volatile-macs norypt-ghost-wireless norypt-ghost-sim-swap; do
+    for _svc in norypt-ghost-clean norypt-ghost-wireless norypt-ghost-sim-swap; do
         if ls /etc/rc.d/S*"${_svc}" >/dev/null 2>&1; then
             _pass "${_svc} enabled"
         else
@@ -302,15 +359,13 @@ _run_check() {
     else
         _warn "norypt-ghost-touch disabled (touchscreen trigger off)"
     fi
-    if mount | grep -q "tmpfs on /etc/oui-tertf "; then
-        _pass "client-MAC database is RAM-backed (tmpfs mounted)"
-    else
-        _fail "tmpfs NOT mounted on /etc/oui-tertf — client MACs are hitting flash"
-    fi
+    # shellcheck source=/dev/null
+    . /lib/norypt-ghost/clean.sh
+    CLEAN_STATUS || _CHECK_FAILS=$((_CHECK_FAILS + 1))
 
     echo ""
     echo "State:"
-    if [ -n "$(_get_factory slot1_imei)" ]; then
+    if [ -n "$(_get_factory slot1_imei)" ] || [ "$(_get_factory sealed)" = "1" ] || [ -n "$(_get_factory blob)" ]; then
         _pass "factory state saved"
     else
         _warn "factory state not captured — run: norypt-ghost install"
@@ -402,7 +457,7 @@ _rotate() {
         echo "norypt-ghost: cycling modem RF for network re-attach..."
         if MODEM_RESET_FOR_PRIVACY; then
             echo "norypt-ghost: done."
-            _screen_splash done
+            _screen_splash "done"
             sleep 2
         else
             echo "norypt-ghost: done — IMEIs written, but the modem has not re-registered yet." >&2
@@ -422,8 +477,9 @@ Commands:
   install          Capture factory state (run once before first rotation)
   status           Show per-slot IMEI/IMSI/ICCID, network registration, MACs
   check            Health check: modem, generator, frames, services (read-only)
-  rotate           Rotate both slot IMEIs and cycle RF for re-attach
-  rotate-wireless  Rotate MACs/SSIDs/hostname/password now (respects option flags)
+  rotate           Rotate both slot IMEIs and cycle RF for re-attach (partial, live — NOT a clean break; use new-identity for unlinkability)
+  rotate-wireless  Rotate MACs/SSIDs/hostname/password now (respects option flags) (partial, live — NOT a clean break; use new-identity for unlinkability)
+  new-identity     Full clean rotation: new profile, every identifier, reboot (recommended)
   sim-swap         Disable RF, write throwaway IMEIs, poweroff; Stage 2 (final IMEI write) runs on next boot
   restore          Restore all factory IMEIs, MACs, SSIDs, and hostname
   help             Show this help
@@ -499,6 +555,23 @@ case "$cmd" in
         _rotate_wireless
         ;;
 
+    new-identity)
+        _save_factory_state || exit 1
+        echo "norypt-ghost: staging new device identity..."
+        _screen_splash rotating
+        _id="$(IDENTITY_STAGE)" || { echo "staging failed" >&2; _screen_fail; exit 1; }
+        echo "  Profile: $_id"
+        echo "  SSID:    $(uci -q get wireless.wifi2g.ssid)"
+        # QR on the framebuffer if available (Task C1); text otherwise.
+        if command -v _render_join_qr >/dev/null 2>&1; then
+            _render_join_qr "$(uci -q get wireless.wifi2g.ssid)" "$(uci -q get wireless.wifi2g.key)"
+        fi
+        echo "norypt-ghost: rebooting in 5s to apply the new identity cleanly."
+        echo "  Scan the QR on the device screen to rejoin Wi-Fi."
+        sleep 5
+        /sbin/reboot
+        ;;
+
     sim-swap)
         _save_factory_state || exit 1
 
@@ -566,6 +639,57 @@ case "$cmd" in
         ;;
 
     restore)
+        # If the factory section is sealed, decrypt it into the UNCOMMITTED uci
+        # delta so the existing _get_factory reads work unchanged. The plaintext
+        # is never committed, so it never reaches flash; we revert it at the end.
+        if [ "$(_get_factory sealed)" = "1" ]; then
+            # Sealed restore fundamentally needs a human to type the passphrase.
+            # Non-TTY callers (prerm, LuCI's backgrounded rpcd restore) would
+            # otherwise block forever on `read`, or worse, decrypt an empty
+            # passphrase silently. Fail loud instead.
+            if [ ! -t 0 ]; then
+                echo "norypt-ghost: factory state is SEALED — run 'norypt-ghost restore' from an interactive SSH session to enter the passphrase. Not restoring now." >&2
+                exit 1
+            fi
+            # shellcheck source=/dev/null
+            . /lib/norypt-ghost/seal.sh
+            _ng_blob="$(_get_factory blob)"
+            printf 'norypt-ghost: factory state is sealed.\nPassphrase: ' >&2
+            stty -echo 2>/dev/null; read -r _ng_pass; stty echo 2>/dev/null; echo >&2
+            _ng_plain="$(SEAL_DECRYPT "$_ng_blob" "$_ng_pass")" || {
+                echo "norypt-ghost: wrong passphrase or corrupt blob — aborting restore (RF untouched)" >&2
+                exit 1
+            }
+            # Load each 'norypt-ghost.factory.KEY=value' line into the uci delta.
+            while IFS= read -r _ng_line; do
+                case "$_ng_line" in norypt-ghost.factory.*=*) ;; *) continue ;; esac
+                _ng_k="${_ng_line%%=*}"
+                _ng_v="${_ng_line#*=}"
+                # uci show wraps values in single quotes and escapes an embedded
+                # ' as '\''; strip the outer quotes, then unescape that sequence
+                # back to a literal ' (e.g. an SSID like "Joe's WiFi").
+                _ng_v="${_ng_v#\'}"; _ng_v="${_ng_v%\'}"
+                _ng_out=""
+                while :; do
+                    case "$_ng_v" in
+                        *"'\''"*)
+                            _ng_out="${_ng_out}${_ng_v%%"'\''"*}'"
+                            _ng_v="${_ng_v#*"'\''"}"
+                            ;;
+                        *)
+                            _ng_out="${_ng_out}${_ng_v}"
+                            break
+                            ;;
+                    esac
+                done
+                _ng_v="$_ng_out"
+                uci -c /etc/config set "${_ng_k}=${_ng_v}"
+            done <<EOF
+$_ng_plain
+EOF
+            trap 'uci -c /etc/config revert norypt-ghost 2>/dev/null' EXIT
+        fi
+
         _f_imei1=$(_get_factory slot1_imei)
         _f_imei2=$(_get_factory slot2_imei 2>/dev/null)
         # Fall back to old field11_imei name from earlier installs
@@ -665,6 +789,30 @@ case "$cmd" in
             uci commit system
         fi
 
+        # Restore wired MAC (first network.@device[*] that currently has one —
+        # only the first device's MAC was captured) and WAN DHCP hostname;
+        # reverts RANDOMIZE_WIRED_MAC / IDENTITY_STAGE.
+        _fwired=$(_get_factory wired_mac)
+        if [ -n "$_fwired" ]; then
+            _wdev_i=0
+            while :; do
+                uci -q get "network.@device[$_wdev_i]" >/dev/null 2>&1 || break
+                if uci -q get "network.@device[$_wdev_i].macaddr" >/dev/null 2>&1; then
+                    echo "norypt-ghost: restoring wired MAC: $_fwired"
+                    uci set "network.@device[$_wdev_i].macaddr=${_fwired}"
+                    break
+                fi
+                _wdev_i=$(( _wdev_i + 1 ))
+            done
+            uci commit network
+        fi
+        _fwanhost=$(_get_factory wan_hostname)
+        if [ -n "$_fwanhost" ] && uci -q get network.wan >/dev/null 2>&1; then
+            echo "norypt-ghost: restoring WAN DHCP hostname: $_fwanhost"
+            uci set network.wan.hostname="$_fwanhost"
+            uci commit network
+        fi
+
         _reg_ok=1
         MODEM_RESET_FOR_PRIVACY || _reg_ok=0
         WIFI_RELOAD
@@ -686,7 +834,7 @@ case "$cmd" in
         echo "  Slot 1 IMEI: $(READ_IMEI)"
         echo "  Slot 2 IMEI: $(READ_IMEI_SLOT2)"
         if [ "$_reg_ok" = "1" ]; then
-            _screen_splash done
+            _screen_splash "done"
             sleep 2
         else
             echo "norypt-ghost: warning — modem has not re-registered yet; it keeps retrying in the background." >&2

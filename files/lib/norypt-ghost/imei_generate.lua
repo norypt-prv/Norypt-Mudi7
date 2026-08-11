@@ -4,6 +4,7 @@
 --   lua imei_generate.lua                       → random IMEI using TAC pool
 --   lua imei_generate.lua random                → same as above
 --   lua imei_generate.lua deterministic <imsi>  → deterministic: same IMEI for same IMSI (stable per-SIM)
+--   lua imei_generate.lua fromtac <8-digit-tac> → random serial appended to a specific TAC (profile mode)
 --
 -- Note: the user-facing "static" IMEI mode is handled entirely in shell
 -- (_gen_imei in functions.sh reads norypt-ghost.options.static_imei_slotN);
@@ -19,6 +20,32 @@
 package.path = "/lib/norypt-ghost/?.lua;" .. package.path
 
 local luhn = require("luhn")
+
+-- Unbiased digit [0,9] from /dev/urandom, falling back to math.random.
+local function rand_digit()
+    local f = io.open("/dev/urandom", "rb")
+    if f then
+        while true do
+            local b = f:read(1)
+            if not b then break end
+            local v = b:byte()
+            if v < 250 then f:close(); return v % 10 end  -- 250 = 25*10, unbiased
+        end
+        f:close()
+    end
+    return math.random(0, 9)
+end
+
+local function gen_serial(n)
+    local s = ""; for _ = 1, n do s = s .. tostring(rand_digit()) end; return s
+end
+
+local function gen_imei_from_tac(tac)
+    if not (tac and tac:match("^%d%d%d%d%d%d%d%d$")) then
+        io.stderr:write("imei_generate: fromtac needs an 8-digit TAC\n"); os.exit(1)
+    end
+    return luhn.make_imei(tac .. gen_serial(6))
+end
 
 local TAC_POOL_PATH = os.getenv("NORYPT_GHOST_TAC_POOL") or "/usr/share/norypt-ghost/tac_pool.json"
 
@@ -100,10 +127,12 @@ local pool = load_tac_pool(TAC_POOL_PATH)
 local imei
 if mode == "deterministic" then
     imei = gen_imei_deterministic(pool, arg[2])
+elseif mode == "fromtac" then
+    imei = gen_imei_from_tac(arg[2])
 elseif mode == "random" or mode == "" then
     imei = gen_imei_from_pool(pool)
 else
-    io.stderr:write("Usage: imei_generate.lua [random|deterministic <imsi>]\n")
+    io.stderr:write("Usage: imei_generate.lua [random|deterministic <imsi>|fromtac <tac>]\n")
     os.exit(1)
 end
 

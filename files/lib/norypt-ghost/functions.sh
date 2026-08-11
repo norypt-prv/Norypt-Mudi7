@@ -6,6 +6,9 @@
 BUS=CPU
 SUB=1  # logical subscription for _at() — slot 1 (-U 1); -U 0 alternates and must not be used
 
+# shellcheck source=/dev/null
+. /lib/norypt-ghost/profile.sh
+
 # ── Messaging ────────────────────────────────────────────────────────────────
 # Writes to syslog and stdout. During boot stdout goes to the system console;
 # during SSH sessions it appears inline.
@@ -189,9 +192,17 @@ GENERATE_IMEI() {
 
 # Generate an IMEI for a given slot using the specified mode.
 # Falls back to random if deterministic/static fails (no IMSI or no static value set).
-# $1 = slot (1 or 2), $2 = mode (random|deterministic|static)
+# $1 = slot (1 or 2), $2 = mode (random|deterministic|static|profile), $3 = profile TAC (profile mode)
 _gen_imei() {
-    local slot="$1" mode="$2"
+    local slot="$1" mode="$2" tac="$3"
+    if [ "$mode" = "profile" ]; then
+        if [ -n "$tac" ]; then
+            lua /lib/norypt-ghost/imei_generate.lua fromtac "$tac"
+        else
+            GENERATE_IMEI
+        fi
+        return
+    fi
     if [ "$mode" = "deterministic" ]; then
         local imsi
         if [ "$slot" = "1" ]; then
@@ -318,6 +329,29 @@ READ_SIGNAL() {
         ''|99) echo "unknown" ;;
         *)     echo "$(( -113 + 2 * csq )) dBm" ;;
     esac
+}
+
+# Active SIM MCC (first 3 IMSI digits), empty if unreadable.
+READ_MCC() {
+    local imsi
+    imsi="$(READ_IMSI_SLOT1 2>/dev/null)"
+    [ -n "$imsi" ] || imsi="$(READ_IMSI_SLOT2 2>/dev/null)"
+    printf '%s' "$imsi" | cut -c1-3
+}
+
+# Lock the modem to 5G-NR + LTE (block 2G/3G downgrade). Controlled by
+# norypt-ghost.options.rat_lock (default on). Syntax confirmed on-device
+# against the RG650V before relied upon; logs and returns non-zero on failure.
+RAT_LOCK_APPLY() {
+    _opt_enabled rat_lock || { logger -t norypt-ghost "rat_lock disabled by option"; return 0; }
+    local out
+    out="$(_at 'AT+QNWPREFCFG="mode_pref",NR5G:LTE' 2>&1)"
+    if echo "$out" | grep -q "OK"; then
+        logger -t norypt-ghost "RAT locked to NR5G:LTE"
+        return 0
+    fi
+    logger -t norypt-ghost "RAT lock FAILED: $out"
+    return 1
 }
 
 # ── MAC generation ───────────────────────────────────────────────────────────
@@ -508,4 +542,76 @@ WIFI_RELOAD() {
     sleep 1
     wifi reload
     /etc/init.d/dnsmasq restart 2>/dev/null
+}
+
+# Rotate the wired (WAN/LAN) device MAC onto OUI $1 (client-class recommended).
+RANDOMIZE_WIRED_MAC() {
+    local oui="$1" dev i=0
+    while :; do
+        # shellcheck disable=SC2034
+        dev="$(uci -q get "network.@device[$i]" 2>/dev/null)" || break
+        uci -q get "network.@device[$i].macaddr" >/dev/null 2>&1 && \
+            uci set "network.@device[$i].macaddr=$(MAC_GEN clients "$oui")"
+        i=$(( i + 1 ))
+    done
+    uci commit network
+}
+
+# True if a Bluetooth adapter is present.
+_bt_present() { [ -d /sys/class/bluetooth ] && ls /sys/class/bluetooth/hci* >/dev/null 2>&1; }
+
+# Rotate the BT adapter MAC (best-effort; hardware/firmware dependent).
+RANDOMIZE_BT_MAC() {
+    _bt_present || return 0
+    local hci mac
+    for hci in /sys/class/bluetooth/hci*; do
+        mac="$(MAC_GEN clients)"
+        hciconfig "$(basename "$hci")" down 2>/dev/null
+        btmgmt --index "$(basename "$hci" | tr -dc 0-9)" public-addr "$mac" 2>/dev/null \
+            || logger -t norypt-ghost "BT MAC set unsupported on this unit"
+        hciconfig "$(basename "$hci")" up 2>/dev/null
+    done
+}
+
+# Build the exact WIFI: join payload string. Escapes \ ; , : " per the
+# Wi-Fi QR convention. $1 = SSID, $2 = PSK.
+_ng_wifi_payload() {
+    _ng_qr_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/;/\\;/g; s/,/\\,/g; s/:/\\:/g; s/"/\\"/g'; }
+    printf 'WIFI:T:WPA;S:%s;P:%s;;' "$(_ng_qr_esc "$1")" "$(_ng_qr_esc "$2")"
+}
+
+# Best-effort render a Wi-Fi join QR to the framebuffer. Renders only when the
+# device has `qrencode` AND a framebuffer image viewer (fbv/fbi). Otherwise logs
+# and returns 0 — the credentials are always available via the CLI and LuCI, and
+# rotation must never depend on this. Always returns 0.
+_render_join_qr() {
+    local ssid="$1" psk="$2" payload viewer png
+    payload="$(_ng_wifi_payload "$ssid" "$psk")"
+
+    if ! command -v qrencode >/dev/null 2>&1; then
+        logger -t norypt-ghost "join QR: qrencode not installed — SSID/PSK shown via CLI/LuCI only"
+        return 0
+    fi
+    # Pick a framebuffer image viewer if present.
+    viewer=""
+    command -v fbv  >/dev/null 2>&1 && viewer="fbv -d 1 -f"
+    [ -z "$viewer" ] && command -v fbi >/dev/null 2>&1 && viewer="fbi -d /dev/fb0 -T 1 -noverbose -a"
+    if [ -z "$viewer" ]; then
+        logger -t norypt-ghost "join QR: no framebuffer image viewer (fbv/fbi) — SSID/PSK shown via CLI/LuCI only"
+        return 0
+    fi
+
+    png=/tmp/norypt-ghost-join.png
+    # -m 4 quiet zone, sized to fit the 240x320 panel.
+    if qrencode -o "$png" -s 6 -m 4 "$payload" 2>/dev/null; then
+        # Free the framebuffer from gl_screen first (same pattern as _screen_splash).
+        ubus call service delete '{"name":"gl_screen"}' 2>/dev/null
+        /etc/init.d/gl_screen stop >/dev/null 2>&1
+        pkill -9 gl_screen 2>/dev/null
+        $viewer "$png" >/dev/null 2>&1
+        logger -t norypt-ghost "join QR rendered for SSID $ssid"
+    else
+        logger -t norypt-ghost "join QR: qrencode failed — SSID/PSK shown via CLI/LuCI only"
+    fi
+    return 0
 }

@@ -8,11 +8,69 @@ Effort key: **S** ≈ hours · **M** ≈ 1–2 days · **L** ≈ a week or more.
 
 ---
 
+## Delivered
+
+Implemented and host-tested (shellcheck + profile validator + Lua/Python unit
+tests, all green in CI). **Not yet on-device verified** — see
+[Project Status](../README.md#project-status) for the acceptance pass still
+required before these are called shipped.
+
+- **Profile-coherent IMEI realism** (closes half of Item 1). A new
+  `usr/share/norypt-ghost/profiles.json` catalog binds vendor, wifi/client
+  OUI, SSID/hostname/password format, region, and TAC into one coherent
+  real-device archetype per entry — `norypt-ghost new-identity` and the
+  sim-swap Stage 2 path pick a whole profile, not independent random fields,
+  so the presented identity can no longer show a NETGEAR SSID over an Apple
+  OUI. **Not closed:** the TAC pool itself is still curated but individually
+  `verified: false` per-entry (see Item 1 below) — real TAC-database
+  verification against a source is still open.
+- **Full-fingerprint `new-identity`** (closes Item 11). One command rotates
+  IMEIs, all MACs (including wired — see below), SSID/hostname/passwords,
+  SSH host keys, and the LuCI TLS cert together, across a reboot, and
+  displays a Wi-Fi-join QR/credentials on the device screen to rejoin.
+  `rotate` / `rotate-wireless` remain as documented partial, live operations.
+- **RAT lock / 2G-3G downgrade block** (closes Item 2). `AT+QNWPREFCFG="mode_pref",NR5G:LTE`
+  is applied on every identity apply, gated by `norypt-ghost.options.rat_lock`
+  (default on).
+- **Wired MAC rotation** (closes Item 3). `RANDOMIZE_WIRED_MAC` covers
+  `network.@device[0].macaddr` with a client-class OUI, wired into the
+  `new-identity` stage/apply flow.
+- **No persistent connected-device logs.** `norypt-ghost-clean` (formerly
+  `norypt-ghost-volatile-macs`, broadened) mounts `tmpfs` over every
+  telemetry directory that exists (`oui-tertf`, `nlbwmon`, `vnstat`), unsets
+  the flash syslog file, disables dnsmasq query logging/cache, and forces
+  DHCP leases to `/tmp`. `norypt-ghost check` reports pass/fail per
+  directory.
+- **Sealed factory state** (partially closes Item 4). `factory_mode=sealed`
+  (default when `openssl` is present) AES-256-CBC/PBKDF2-encrypts the
+  `factory` UCI section behind an install-time passphrase; restore requires
+  an interactive SSH session and the passphrase — non-interactive callers
+  (prerm, backgrounded LuCI restore) refuse rather than fail silently or
+  leave state in a half-restored condition. **Trade-off, stated plainly: a
+  forgotten passphrase means the factory identity cannot be recovered.**
+  **Not closed:** the `last_*_rotate` timestamp-to-flash and
+  export/import-factory sub-items are still open.
+- **TTL/hop-limit normalization** (new capability, not in the original
+  numbered list). `norypt-ghost-ttl` sets egress TTL/hop-limit to 64 via
+  `nft` (or `iptables`/`ip6tables` fallback) so NATed client traffic no
+  longer reveals itself by TTL decrement — defeats the common
+  carrier tethering-detection heuristic.
+- **SSH/TLS regen.** `IDENTITY_REGEN_KEYS` (part of `new-identity`)
+  regenerates the dropbear host keys and the LuCI self-signed TLS cert —
+  both are permanent device identifiers that survived every prior rotation.
+
+---
+
 ## Tier 1 — Holes in the tool's own threat model
 
 These are cases where the package does not deliver what its design promises.
 
 ### 1. The TAC pool is entirely unverified · **S**
+
+**◐ Partially delivered** — see [Delivered](#delivered). Profile-vendor/OUI/TAC
+coherence now ships; per-entry TAC-database verification does not — every
+TAC is still `"verified": false` and the CI `verified:false`-fails-the-build
+gate described below has not been added.
 
 `files/usr/share/norypt-ghost/tac_pool.json` ships **7 TACs, every one marked
 `"verified": false`** with `"source": "TODO: verify at hicelltek.com"`. The
@@ -39,6 +97,8 @@ comment.
 
 ### 2. No 2G/3G downgrade block · **S–M**
 
+**✅ Delivered** — see [Delivered](#delivered).
+
 The ancestor of this project (SRLabs' blue-merle) exists because of IMSI
 catchers. The classic IMSI-catcher technique is a **downgrade**: force the
 handset onto 2G, where mutual authentication is absent and encryption is weak
@@ -51,6 +111,10 @@ RG-series syntax), exposed as a UCI option and a LuCI toggle, defaulting to
 coverage. This is the single highest-value *new* capability on this list.
 
 ### 3. Wired MACs are never rotated · **S**
+
+**✅ Delivered** — see [Delivered](#delivered). (The Bluetooth-adapter check
+mentioned in the fix below was not part of this pass — the E5800 was not
+confirmed to carry one.)
 
 `RANDOMIZE_MACADDR` covers `wifi2g/5g/6g`, the three guest APs, and the
 repeater STA. It does not touch `network.@device[0].macaddr` — the Ethernet
@@ -66,6 +130,11 @@ its WAN side). Check for a Bluetooth adapter on the E5800 and cover its MAC
 too if present.
 
 ### 4. Factory identity is stored in cleartext on flash · **M**
+
+**◐ Partially delivered** — see [Delivered](#delivered). The `sealed`
+`factory_mode` ships (encrypted, SSH-only, passphrase-gated restore); the
+`last_*_rotate` timestamps still land on flash and `export-factory` /
+`import-factory` do not exist yet.
 
 `/etc/config/norypt-ghost` holds the real IMEIs for both slots, all seven
 factory MACs, factory SSIDs, hostname, **and the factory Wi-Fi keys** — in
@@ -167,6 +236,8 @@ hardcoded TP-Link OUI.
 
 ### 11. No single "new identity" action · **S**
 
+**✅ Delivered** — see [Delivered](#delivered).
+
 `rotate` changes IMEIs. `rotate-wireless` changes Wi-Fi identity. Nothing
 changes both. An operator who runs only one leaves the other as a linking
 handle across the rotation boundary — and the LuCI page presents them as two
@@ -196,6 +267,11 @@ a rotation tool into a detection tool. It is the natural flagship feature and
 the clearest differentiator from upstream.
 
 ### 14. Zero automated tests · **M**
+
+**◐ Partially delivered.** `tests/run.sh` runs shellcheck, the profile
+validator, a Lua unit suite, and Python logic tests, and `.github/workflows/build.yml`
+now runs it as a required `test` job that `build` depends on. **Not closed:**
+no container-based install/remove smoke test of the built IPK exists yet.
 
 CI builds the package twice and never tests it. The Luhn module, the IMEI
 generator, the TAC/OUI parsers, and the UCI option validation in

@@ -18,7 +18,9 @@
 
 . /lib/norypt-ghost/functions.sh
 
+# shellcheck disable=SC2034
 START=25
+# shellcheck disable=SC2034
 STOP=99
 
 # Poll until the modem AT interface is truly ready, or 30s timeout.
@@ -43,6 +45,16 @@ _wait_for_at() {
 }
 
 start() {
+    # Full-identity rotation (new-identity) completes here too, before attach.
+    if [ -f /etc/norypt-ghost.identity-pending ]; then
+        # shellcheck source=/dev/null
+        . /lib/norypt-ghost/identity.sh
+        _screen_splash rotating
+        _wait_for_at || { _screen_splash error; return 1; }
+        IDENTITY_APPLY_BOOT
+        return 0
+    fi
+
     [ -f /etc/norypt-ghost.sim-swap-pending ] || return 0
 
     _screen_splash rotating
@@ -111,7 +123,7 @@ start() {
 
     logger -p notice -t norypt-ghost "sim-swap complete: slot1=$imei1 slot2=$imei2"
     _screen_msg "SIM swap: done. Registering with new identity..."
-    _screen_splash done
+    _screen_splash "done"
 }
 
 stop() { return 0; }

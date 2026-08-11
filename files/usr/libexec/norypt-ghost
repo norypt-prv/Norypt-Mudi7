@@ -1,7 +1,7 @@
 #!/bin/sh
 # norypt-ghost rpcd exec backend — called by LuCI2 via fs.exec().
-# Subcommands: status, rotate, rotate_wireless, restore, sim_swap, imsi,
-#              set:<key>=<val>, log
+# Subcommands: status, new_identity, rotate, rotate_wireless, restore,
+#              sim_swap, imsi, set:<key>=<val>, log
 
 . /lib/norypt-ghost/functions.sh
 
@@ -47,11 +47,15 @@ case "$1" in
         _sst1=$(uci -q get norypt-ghost.options.static_imei_slot1 2>/dev/null)
         _sst2=$(uci -q get norypt-ghost.options.static_imei_slot2 2>/dev/null)
         _reg_timeout=$(uci -q get norypt-ghost.options.register_timeout 2>/dev/null)
+        _opt_rat_lock=$(uci -q get norypt-ghost.options.rat_lock 2>/dev/null)
+        _opt_factory_mode=$(uci -q get norypt-ghost.options.factory_mode 2>/dev/null)
+        _opt_default_region=$(uci -q get norypt-ghost.options.default_region 2>/dev/null)
+        _factory_sealed=$(uci -q get norypt-ghost.factory.sealed 2>/dev/null)
         _last_imei_rotate=$(cat /etc/norypt-ghost.last_imei_rotate 2>/dev/null)
         _last_wireless_rotate=$(cat /etc/norypt-ghost.last_wireless_rotate 2>/dev/null)
         _installed=$([ -n "$_fi1" ] && printf true || printf false)
         _touch_enabled=$([ -n "$(ls /etc/rc.d/S*norypt-ghost-touch 2>/dev/null)" ] && printf '1' || printf '0')
-        printf '{"imei1":"%s","imei2":"%s","ssid":"%s","guest_ssid":"%s","mac_2g":"%s","mac_5g":"%s","mac_6g":"%s","mac_sta":"%s","mac_guest2g":"%s","mac_guest5g":"%s","mac_guest6g":"%s","hostname":"%s","wifi2g_key":"%s","guest2g_key":"%s","factory_i1":"%s","factory_i2":"%s","factory_ssid":"%s","factory_guest_ssid":"%s","factory_host":"%s","factory_mac_2g":"%s","factory_mac_5g":"%s","factory_mac_6g":"%s","factory_mac_sta":"%s","factory_mac_guest2g":"%s","factory_mac_guest5g":"%s","factory_mac_guest6g":"%s","factory_wifi2g_key":"%s","factory_guest2g_key":"%s","opt_mac":"%s","opt_ssid":"%s","opt_hostname":"%s","opt_password":"%s","opt_boot":"%s","imei_mode_slot1":"%s","imei_mode_slot2":"%s","static_imei_slot1":"%s","static_imei_slot2":"%s","register_timeout":"%s","last_imei_rotate":"%s","last_wireless_rotate":"%s","touch_enabled":"%s","installed":%s}\n' \
+        printf '{"imei1":"%s","imei2":"%s","ssid":"%s","guest_ssid":"%s","mac_2g":"%s","mac_5g":"%s","mac_6g":"%s","mac_sta":"%s","mac_guest2g":"%s","mac_guest5g":"%s","mac_guest6g":"%s","hostname":"%s","wifi2g_key":"%s","guest2g_key":"%s","factory_i1":"%s","factory_i2":"%s","factory_ssid":"%s","factory_guest_ssid":"%s","factory_host":"%s","factory_mac_2g":"%s","factory_mac_5g":"%s","factory_mac_6g":"%s","factory_mac_sta":"%s","factory_mac_guest2g":"%s","factory_mac_guest5g":"%s","factory_mac_guest6g":"%s","factory_wifi2g_key":"%s","factory_guest2g_key":"%s","opt_mac":"%s","opt_ssid":"%s","opt_hostname":"%s","opt_password":"%s","opt_boot":"%s","imei_mode_slot1":"%s","imei_mode_slot2":"%s","static_imei_slot1":"%s","static_imei_slot2":"%s","register_timeout":"%s","rat_lock":"%s","factory_mode":"%s","default_region":"%s","factory_sealed":"%s","last_imei_rotate":"%s","last_wireless_rotate":"%s","touch_enabled":"%s","installed":%s}\n' \
             "${_imei1:----}" "${_imei2:----}" \
             "$(_js "${_ssid:----}")" "$(_js "${_gssid:----}")" \
             "${_mac2g:----}" "${_mac5g:----}" "${_mac6g:----}" "${_macsta:----}" \
@@ -69,10 +73,19 @@ case "$1" in
             "${_opt_mode1:-random}" "${_opt_mode2:-random}" \
             "$(_js "${_sst1}")" "$(_js "${_sst2}")" \
             "${_reg_timeout:-120}" \
+            "${_opt_rat_lock:-1}" "${_opt_factory_mode:-sealed}" "${_opt_default_region:-NA}" \
+            "${_factory_sealed:-0}" \
             "$(_js "${_last_imei_rotate}")" \
             "$(_js "${_last_wireless_rotate}")" \
             "$_touch_enabled" \
             "$_installed"
+        ;;
+    new_identity)
+        # Full rotation (IMEIs + wireless/system + RAT/region) — the CLI
+        # reboots the device at the end, so background and return at once.
+        : > /tmp/norypt-ghost.log
+        /usr/bin/norypt-ghost new-identity >> /tmp/norypt-ghost.log 2>&1 &
+        printf '{"started":true}\n'
         ;;
     rotate)
         : > /tmp/norypt-ghost.log
@@ -149,6 +162,24 @@ case "$1" in
                 if [ "$_val" -lt 10 ] || [ "$_val" -gt 600 ]; then
                     printf '{"error":"timeout must be 10-600 seconds"}\n'; exit 1
                 fi
+                ;;
+            rat_lock)
+                case "$_val" in
+                    0|1) ;;
+                    *) printf '{"error":"value must be 0 or 1"}\n'; exit 1 ;;
+                esac
+                ;;
+            factory_mode)
+                case "$_val" in
+                    sealed|plain) ;;
+                    *) printf '{"error":"factory mode must be sealed or plain"}\n'; exit 1 ;;
+                esac
+                ;;
+            default_region)
+                case "$_val" in
+                    EU|NA) ;;
+                    *) printf '{"error":"region must be EU or NA"}\n'; exit 1 ;;
+                esac
                 ;;
             *)
                 printf '{"error":"unknown option"}\n'
