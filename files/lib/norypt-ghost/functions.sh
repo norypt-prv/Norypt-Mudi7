@@ -6,6 +6,9 @@
 BUS=CPU
 SUB=1  # logical subscription for _at() — slot 1 (-U 1); -U 0 alternates and must not be used
 
+# shellcheck source=/dev/null
+. /lib/norypt-ghost/profile.sh
+
 # ── Messaging ────────────────────────────────────────────────────────────────
 # Writes to syslog and stdout. During boot stdout goes to the system console;
 # during SSH sessions it appears inline.
@@ -516,4 +519,33 @@ WIFI_RELOAD() {
     sleep 1
     wifi reload
     /etc/init.d/dnsmasq restart 2>/dev/null
+}
+
+# Rotate the wired (WAN/LAN) device MAC onto OUI $1 (client-class recommended).
+RANDOMIZE_WIRED_MAC() {
+    local oui="$1" dev i=0
+    while :; do
+        # shellcheck disable=SC2034
+        dev="$(uci -q get "network.@device[$i]" 2>/dev/null)" || break
+        uci -q get "network.@device[$i].macaddr" >/dev/null 2>&1 && \
+            uci set "network.@device[$i].macaddr=$(MAC_GEN clients "$oui")"
+        i=$(( i + 1 ))
+    done
+    uci commit network
+}
+
+# True if a Bluetooth adapter is present.
+_bt_present() { [ -d /sys/class/bluetooth ] && ls /sys/class/bluetooth/hci* >/dev/null 2>&1; }
+
+# Rotate the BT adapter MAC (best-effort; hardware/firmware dependent).
+RANDOMIZE_BT_MAC() {
+    _bt_present || return 0
+    local hci mac
+    for hci in /sys/class/bluetooth/hci*; do
+        mac="$(MAC_GEN clients)"
+        hciconfig "$(basename "$hci")" down 2>/dev/null
+        btmgmt --index "$(basename "$hci" | tr -dc 0-9)" public-addr "$mac" 2>/dev/null \
+            || logger -t norypt-ghost "BT MAC set unsupported on this unit"
+        hciconfig "$(basename "$hci")" up 2>/dev/null
+    done
 }
