@@ -210,13 +210,13 @@ This section validates that the factory identity is securely stored and can be r
 - [ ] **Verify LuCI "Restore Factory" button is disabled (sealed state only)**
   - If the device is sealed (openssl present), open the LuCI web interface and navigate to **System > Backup / Flash Firmware** or **System > Factory Reset** (exact path varies by firmware version).
   - The "Restore Factory" or "Reset to Factory Defaults" button should be **disabled** (greyed out).
-  - Hovering over it or clicking should show a message: `SSH-only restore: use 'norypt-ghost restore' on the command line. Enter the passphrase when prompted.` or similar.
+  - Hovering over it or inspecting the HTML should show a tooltip indicating that the device is sealed and that SSH is required to restore (the message will reference `norypt-ghost restore` over SSH).
   - Fallback: If the button is still enabled, the LuCI integration is incomplete. Users can still restore via SSH, but the UI warning is missing.
 
 - [ ] **Verify opkg remove behavior on sealed device**
   - While the device is still sealed, SSH in and run `opkg remove norypt-ghost`.
   - The remove process should:
-    - Print a warning: `WARNING: Device is sealed (factory state encrypted). Modem and Wi-Fi will retain their current identity. To restore the factory identity, use 'norypt-ghost restore' and enter your passphrase.`
+    - Print a warning to the console that the modem keeps its current identity and that the operator must run `norypt-ghost restore` with the passphrase to restore the original identity (exact warning text: `norypt-ghost: factory state is SEALED — the modem KEEPS its current identity. To restore the original identity, run 'norypt-ghost restore' with your passphrase BEFORE or AFTER removal.`).
     - Proceed to uninstall the package **without hanging**.
     - Exit with code **0**.
   - After removal, run `norypt-ghost status` (it should fail or print "not installed").
@@ -242,16 +242,20 @@ This section confirms that older command syntax still works (for backward compat
 
 - [ ] **Legacy rotate command**
   - Run `norypt-ghost rotate`.
-  - This should behave identically to `norypt-ghost new-identity` (full identity rotation, QR output, reboot).
-  - After boot, verify with `norypt-ghost status` that all identifiers changed (same validation as the full-identity rotation section).
+  - This rotates **both IMEIs only** (slots 1 and 2) and cycles RF for re-attachment. It is a **partial, live rotation** — it does NOT change BSSIDs, SSID, PSK, hostname, or wired MAC, shows NO QR code, and does NOT reboot. Use `new-identity` for a clean break.
+  - After the command completes, run `norypt-ghost status` and verify:
+    - IMEI (both slots) **changed** from the previous value.
+    - All BSSIDs, SSID, PSKs, hostname, and wired MACs remained **unchanged**.
+    - The modem cycled RF (radio silence, then re-attach to the current network).
 
 - [ ] **Legacy rotate-wireless command**
   - Run `norypt-ghost rotate-wireless`.
-  - This should rotate **only** the Wi-Fi identifiers (SSID, BSSID, PSK), not the modem IMEI or hostname.
-  - After the command completes (may not reboot), run `norypt-ghost status` and verify:
+  - This rotates the wireless and network identity **without touching the modem IMEI**. By default, it changes MACs, BSSIDs, SSID, guest SSID, both PSKs, **and the hostname** (the last is controlled by the `randomize_hostname` option, which defaults to enabled). It applies changes live via `wifi reload` and does NOT reboot.
+  - After the command completes, run `norypt-ghost status` and verify:
     - IMEI (both slots) remained **unchanged** from the previous value.
     - All Wi-Fi BSSIDs and SSID **changed**.
-    - Hostname remained **unchanged**.
+    - Hostname **changed** (if `randomize_hostname=1`, which is the default; set `randomize_hostname=0` in the config to preserve hostname).
+    - All MACs changed (2.4 GHz, 5 GHz, 6 GHz, guest, and STA MACs).
   - Connect a device to the new SSID to verify Wi-Fi works.
 
 - [ ] **Legacy sim-swap command (two-stage)**
