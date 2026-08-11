@@ -7,9 +7,7 @@ BUS=CPU
 SUB=1  # logical subscription for _at() — slot 1 (-U 1); -U 0 alternates and must not be used
 
 # shellcheck source=/dev/null
-# Guarded: absent on the host test environment (host tests source this file
-# directly); always present at this path once installed on-device.
-[ -r /lib/norypt-ghost/profile.sh ] && . /lib/norypt-ghost/profile.sh
+. /lib/norypt-ghost/profile.sh
 
 # ── Messaging ────────────────────────────────────────────────────────────────
 # Writes to syslog and stdout. During boot stdout goes to the system console;

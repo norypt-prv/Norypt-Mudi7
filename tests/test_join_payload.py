@@ -6,9 +6,12 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 LIB  = REPO / "files/lib/norypt-ghost/functions.sh"
 
 def payload(ssid, psk):
-    # Call the shell helper _ng_wifi_payload (a pure-string sub-helper of
-    # _render_join_qr) so we test the exact string the device will encode.
-    script = f'. "{LIB}"; _ng_wifi_payload "{ssid}" "{psk}"'
+    # Extract only the self-contained _ng_wifi_payload function so we don't
+    # source functions.sh (which sources an absolute device-only path).
+    fn = subprocess.check_output(
+        ["awk", "/^_ng_wifi_payload\\(\\)/{p=1} p{print} p&&/^}/{exit}",
+         str(LIB)], text=True)
+    script = fn + f'\n_ng_wifi_payload "{ssid}" "{psk}"'
     return subprocess.check_output(["sh", "-c", script], text=True).strip()
 
 class TestJoinPayload(unittest.TestCase):
