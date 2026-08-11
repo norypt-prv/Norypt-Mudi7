@@ -105,6 +105,23 @@ _save_factory_state() {
         uci -c /etc/config set norypt-ghost.factory.guest6g_ssid="$guest6g_ssid"
         uci -c /etc/config set norypt-ghost.factory.hostname="$hostname"
 
+        # Wired MAC (first device that has one) + WAN DHCP hostname — captured
+        # here too, so restore/uninstall can revert what RANDOMIZE_WIRED_MAC and
+        # IDENTITY_STAGE rotate on network.@device[*] and network.wan.
+        local wired_mac wan_hostname _dev_i
+        wired_mac=""
+        _dev_i=0
+        while :; do
+            uci -q get "network.@device[$_dev_i]" >/dev/null 2>&1 || break
+            if [ -z "$wired_mac" ]; then
+                wired_mac=$(uci -q get "network.@device[$_dev_i].macaddr" 2>/dev/null)
+            fi
+            _dev_i=$(( _dev_i + 1 ))
+        done
+        wan_hostname=$(uci -q get network.wan.hostname 2>/dev/null)
+        [ -n "$wired_mac" ] && uci -c /etc/config set norypt-ghost.factory.wired_mac="$wired_mac"
+        [ -n "$wan_hostname" ] && uci -c /etc/config set norypt-ghost.factory.wan_hostname="$wan_hostname"
+
         echo "  IMEI (slot 1):   $slot1_imei"
         echo "  IMEI (slot 2):   $slot2_imei"
         echo "  WiFi MAC (2.4g): $wifi2g_mac"
@@ -348,7 +365,7 @@ _run_check() {
 
     echo ""
     echo "State:"
-    if [ -n "$(_get_factory slot1_imei)" ]; then
+    if [ -n "$(_get_factory slot1_imei)" ] || [ "$(_get_factory sealed)" = "1" ] || [ -n "$(_get_factory blob)" ]; then
         _pass "factory state saved"
     else
         _warn "factory state not captured — run: norypt-ghost install"
@@ -770,6 +787,30 @@ EOF
             printf '%s' "$_fhost" > /proc/sys/kernel/hostname
             uci set system.@system[0].hostname="$_fhost"
             uci commit system
+        fi
+
+        # Restore wired MAC (first network.@device[*] that currently has one —
+        # only the first device's MAC was captured) and WAN DHCP hostname;
+        # reverts RANDOMIZE_WIRED_MAC / IDENTITY_STAGE.
+        _fwired=$(_get_factory wired_mac)
+        if [ -n "$_fwired" ]; then
+            _wdev_i=0
+            while :; do
+                uci -q get "network.@device[$_wdev_i]" >/dev/null 2>&1 || break
+                if uci -q get "network.@device[$_wdev_i].macaddr" >/dev/null 2>&1; then
+                    echo "norypt-ghost: restoring wired MAC: $_fwired"
+                    uci set "network.@device[$_wdev_i].macaddr=${_fwired}"
+                    break
+                fi
+                _wdev_i=$(( _wdev_i + 1 ))
+            done
+            uci commit network
+        fi
+        _fwanhost=$(_get_factory wan_hostname)
+        if [ -n "$_fwanhost" ] && uci -q get network.wan >/dev/null 2>&1; then
+            echo "norypt-ghost: restoring WAN DHCP hostname: $_fwanhost"
+            uci set network.wan.hostname="$_fwanhost"
+            uci commit network
         fi
 
         _reg_ok=1

@@ -321,7 +321,7 @@ One run does all of the following:
 3. Regenerates the SSH host keys and the LuCI TLS cert — both are permanent device identifiers that survive `rotate`/`rotate-wireless` untouched.
 4. Stages the new IMEIs for both slots.
 5. Prints (and, if `qrencode` plus a framebuffer viewer are installed, renders on the device screen) a `WIFI:` join QR and the plain SSID/password, so you can rejoin the new network immediately after reboot.
-6. Reboots. The IMEIs are written *before* the modem's first attach on the next boot (the same S25 ordering the SIM-swap flow relies on), so the old identity never bridges the change.
+6. Reboots with RF disabled. The new IMEIs are written *before* RF (and the modem's first attach) is re-enabled on the next boot (the same S25 ordering the SIM-swap flow relies on), so the modem never attaches on the old identity. Note: unlike the two-stage SIM-swap flow, `new-identity` does not write a pre-reboot throwaway IMEI — the modem's own NV storage briefly still holds the old IMEI between shutdown and the S25 rewrite, it just never attaches with it, because RF stays off until after the rewrite.
 
 ```
 norypt-ghost: staging new device identity...

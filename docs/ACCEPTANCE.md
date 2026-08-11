@@ -56,6 +56,12 @@ These checks verify that the device hardware, dependencies, and GL-iNet environm
   - If **both** are present: Bluetooth MAC rotation will work and will be logged.
   - If **either is absent**: Bluetooth MAC rotation is a no-op (device keeps the factory BT address). The rotation will still succeed and log the action. Plan to reinstall Bluetooth tools if MAC rotation is critical for your use case.
 
+- [ ] **busybox grep alternation support (SSID token expansion)**
+  - `_expand_format` in `files/lib/norypt-ghost/profile.sh` uses `grep '{[0-9]\+\(hex\|lower\|digits\)}'` (BRE alternation via `\|`), which host GNU grep supports but this device's busybox grep may not — it's not testable off-hardware.
+  - After running `norypt-ghost new-identity`, inspect the resulting SSID (`uci get wireless.wifi2g.ssid`).
+  - If it is an expanded value (e.g. `NETGEAR-a3f1`): busybox grep supports the alternation; no action needed.
+  - If it is still the literal template (e.g. `NETGEAR-{4hex}`): busybox grep lacks `\|` support and `_expand_format` needs a `case`/`sed` rewrite instead of the `grep \|` alternation.
+
 ---
 
 ## Full-Identity Rotation
