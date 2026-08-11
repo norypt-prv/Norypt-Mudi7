@@ -1,13 +1,82 @@
+<div align="center">
+
 # Norypt Ghost
+
+**Full-device identity rotation for the GL-iNet GL-E5800 (Mudi 7) 5G hotspot.**
+
+*Every identifier your router broadcasts — IMEI, MAC, BSSID, SSID, hostname, host keys — rotated together, coherently, in one command.*
 
 [![Build (script)](https://github.com/norypt-prv/Norypt-Mudi7/actions/workflows/build.yml/badge.svg)](https://github.com/norypt-prv/Norypt-Mudi7/actions/workflows/build.yml)
 [![Build (SDK)](https://github.com/norypt-prv/Norypt-Mudi7/actions/workflows/sdk-build.yml/badge.svg)](https://github.com/norypt-prv/Norypt-Mudi7/actions/workflows/sdk-build.yml)
 [![License: GPL-2.0](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](#license)
 [![Platform](https://img.shields.io/badge/platform-GL--E5800%20(Mudi%207)-8900ff.svg)](#compatibility)
+[![Verified TACs](https://img.shields.io/badge/TAC%20pool-verified-00c2ff.svg)](#imei-realism-the-profile-catalog)
 
-**Radio-identity rotation for the GL-iNet GL-E5800 (Mudi 7) 5G mobile hotspot** — dual-slot IMEI rotation, MAC/BSSID/SSID/hostname/password randomization, a full-fingerprint `new-identity` rotation, an RAT lock against 2G/3G downgrade, a two-stage SIM-swap flow, sealed factory state, and a no-persistent-connected-device-logs guarantee, controlled from the command line, a LuCI admin page, or the device's touchscreen.
+</div>
 
-Norypt Ghost is derived from [blue-merle-v2](https://github.com/WSchlesner/blue-merle-v2) (GPL-2.0), itself a ground-up rewrite of [SRLabs' blue-merle](https://github.com/srlabs/blue-merle) for the Mudi 7 — a device with a completely different modem (Quectel RG650V-NA, integrated MHI instead of USB), a rewritten `gl_modem` wrapper, dual SIM + eSIM support, a touchscreen instead of a hardware switch, and a new UCI layout. See [Attribution](#attribution).
+---
+
+A travel router is a beacon. It shouts an IMEI at every cell tower, a set of BSSIDs at every Wi-Fi scanner in range, an SSID and hostname to every client, and it quietly writes down every device that ever connected to it. Rotate one of those and the others still link you to yesterday.
+
+**Norypt Ghost rotates all of them at once — and makes the result look like an ordinary phone.**
+
+```console
+$ norypt-ghost new-identity
+norypt-ghost: staging new device identity...
+  Profile: apple-iphone-15-pro-eu
+  SSID:    iPhone
+norypt-ghost: rebooting in 5s to apply the new identity cleanly.
+  Scan the QR on the device screen to rejoin Wi-Fi.
+```
+
+One command. One reboot. New IMEIs on both SIM slots, new MACs on every radio *and* the wired port, new SSID, new passwords, new hostname, new SSH host keys, new TLS certificate — and not a single byte of the old identity left in RAM or on flash to bridge the two.
+
+---
+
+## Why this exists
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Coherent, not just random
+
+Most tools randomize each field independently. That produces impossible devices — an Apple OUI broadcasting a NETGEAR SSID — which is *more* identifying, not less.
+
+Norypt Ghost picks **one real device profile** per rotation. The IMEI's TAC vendor, the Wi-Fi OUI vendor, and the SSID all name the same phone, by construction.
+
+</td>
+<td width="50%" valign="top">
+
+### Verified, not invented
+
+Every TAC in the catalog is the real first-8 digits of a genuine device IMEI, sourced from a public IMEI registry with the URL recorded per entry.
+
+A fabricated TAC — or a real one whose radio bands don't match the cell you attach to — is detectable, and has been confirmed to trigger carrier throttling.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### Hides in the biggest crowd
+
+The catalog presents the device as a popular smartphone tethering its SIM — millions of identical units — rather than a niche hotspot model with a few thousand.
+
+Modern phones also randomize their own hotspot BSSID, so the locally-administered MAC bit reads as *normal phone behavior* instead of a spoofing tell.
+
+</td>
+<td width="50%" valign="top">
+
+### Forgets everything, by default
+
+Stock firmware keeps a permanent on-flash database of every client that ever connected, plus DNS query logs, lease files, and bandwidth stats per device.
+
+Norypt Ghost RAM-backs all of it. Seize the router, and there is no history of who used it — and `norypt-ghost check` fails loudly if that ever stops being true.
+
+</td>
+</tr>
+</table>
 
 > **Legal note:** changing a device's IMEI is restricted or unlawful in some jurisdictions. This software is provided for lawful privacy work and personal use where permitted. You are responsible for compliance with your local laws.
 
@@ -15,59 +84,51 @@ Norypt Ghost is derived from [blue-merle-v2](https://github.com/WSchlesner/blue-
 
 ## Table of Contents
 
-- [Features](#features)
+- [Feature Matrix](#feature-matrix)
 - [Compatibility](#compatibility)
 - [Quick Start](#quick-start)
-- [Usage](#usage)
-  - [LuCI admin page](#luci-admin-page)
-  - [Command line](#command-line)
-  - [Touchscreen trigger](#touchscreen-trigger)
-  - [Health check](#health-check)
+- [Usage](#usage) — [LuCI](#luci-admin-page) · [CLI](#command-line) · [Touchscreen](#touchscreen-trigger) · [Health check](#health-check)
 - [How It Works](#how-it-works)
   - [What it protects (and what it can't)](#what-it-protects-and-what-it-cant)
+  - [`new-identity`: the full clean rotation](#new-identity-the-full-clean-rotation)
+  - [IMEI realism: the profile catalog](#imei-realism-the-profile-catalog)
   - [Boot sequence](#boot-sequence)
-  - [IMEI rotation](#imei-rotation)
-  - [IMEI modes](#imei-modes)
+  - [IMEI rotation](#imei-rotation) · [IMEI modes](#imei-modes)
   - [SIM-swap flow](#sim-swap-flow)
   - [MAC, BSSID, and SSID randomization](#mac-bssid-and-ssid-randomization)
-  - [`new-identity`: full clean rotation](#new-identity-full-clean-rotation)
   - [RAT lock (2G/3G downgrade block)](#rat-lock-2g3g-downgrade-block)
-  - [Volatile client MACs](#volatile-client-macs)
   - [No persistent connected-device logs](#no-persistent-connected-device-logs)
   - [Sealed factory state](#sealed-factory-state)
+  - [TTL normalization](#ttl-normalization)
   - [Splash screens](#splash-screens)
 - [Configuration Reference](#configuration-reference)
 - [Building from Source](#building-from-source)
 - [Uninstalling](#uninstalling)
 - [AT Commands We Deliberately Avoid](#at-commands-we-deliberately-avoid)
-- [Project Status](#project-status)
-- [Roadmap](#roadmap)
+- [Project Status](#project-status) · [Roadmap](#roadmap)
 - [Repository Layout](#repository-layout)
-- [Attribution](#attribution)
-- [License](#license)
+- [Attribution](#attribution) · [License](#license)
 
 ---
 
-## Features
+## Feature Matrix
 
-| Feature | Description |
-|---|---|
-| **Dual IMEI rotation** | Both modem IMEI slots (SIM 1 + SIM 2/eSIM) rotated independently via `AT+EGMR`, persisted to modem NV |
-| **Three IMEI modes** | Per-slot: **Random** (Luhn-valid, band-matched TAC), **Deterministic** (stable hash of the SIM's IMSI), or **Static** (user-supplied) |
-| **Consistent wireless identity** | One router vendor per rotation: all BSSIDs share a single OUI and the SSID broadcasts a matching brand name — no impossible vendor mixes |
-| **Wireless rotation** | BSSIDs/MACs, SSID, hostname, and Wi-Fi passwords randomized on demand or on every boot |
-| **Two-stage SIM swap** | Throwaway IMEIs written before poweroff; final IMEIs written on next boot *before* the modem first attaches — neither real identity bridges the swap |
-| **`new-identity`** | One command, one reboot: coherent profile, every IMEI/MAC/SSID/password, SSH host keys, and the LuCI TLS cert rotated together, with a join QR to reconnect |
-| **RAT lock** | Modem locked to 5G NR/LTE (`AT+QNWPREFCFG`), blocking the 2G/3G downgrade IMSI-catchers rely on |
-| **No persistent connected-device logs** | Syslog, dnsmasq query log/cache, DHCP leases, and every telemetry directory RAM-backed — nothing about a connected client reaches flash |
-| **Sealed factory state** | Factory IMEIs/MACs/SSIDs/keys AES-256-CBC-encrypted behind an install-time passphrase; restore is SSH-only and needs it |
-| **TTL normalization** | Egress TTL/hop-limit set to 64 so NATed client traffic doesn't reveal tethering by TTL decrement |
-| **Volatile client MACs** | `tmpfs` mounted over GL-iNet's client-MAC database — connected-device history never reaches flash |
-| **Network visibility** | Per-slot registration state, operator, and signal in both the CLI and LuCI |
-| **Health check** | `norypt-ghost check` — 16-point read-only self-test of the modem, generator, frames, and services |
-| **Three control surfaces** | CLI over SSH, LuCI admin page, and a 2-second touchscreen long-press for SIM swap |
-| **GL-iNet UI sync** | Settings → About Device shows the new IMEI automatically after every rotation |
-| **Splash screens** | Six full-screen status frames written straight to the framebuffer during operations |
+| | Feature | What it does |
+|---|---|---|
+| ⚡ | **`new-identity`** | One command, one reboot: coherent device profile, both IMEIs, every MAC (Wi-Fi **and** wired), SSID, passwords, hostname, SSH host keys, and the LuCI TLS cert — all rotated together, with a join QR to reconnect |
+| 🎭 | **Profile catalog** | Six real-phone archetypes (Apple / Samsung, EU + US) with **verified TACs** and vendor-matched OUIs — the presented identity is internally consistent at every layer |
+| 📡 | **Dual IMEI rotation** | Both modem slots (SIM 1 + SIM 2/eSIM) rotated independently via `AT+EGMR`, persisted to modem NV |
+| 🔀 | **Three IMEI modes** | Per-slot **Random** (Luhn-valid, band-matched TAC), **Deterministic** (stable per-SIM), or **Static** (user-supplied) |
+| 🛡️ | **RAT lock** | Modem locked to 5G NR / LTE, blocking the 2G downgrade IMSI-catchers rely on to strip authentication |
+| 🔁 | **Two-stage SIM swap** | Throwaway IMEIs written before poweroff, final IMEIs on next boot *before* first attach — neither real identity bridges the swap |
+| 🧹 | **No connected-device logs** | Syslog, DNS query log, DHCP leases, client-MAC DB, and bandwidth stats all RAM-backed — nothing about a client reaches flash |
+| 🔐 | **Sealed factory state** | Factory IMEIs/MACs/SSIDs/keys AES-256-CBC encrypted (PBKDF2, 200k) behind an install-time passphrase |
+| 🥷 | **TTL normalization** | Egress TTL/hop-limit pinned to 64, so NATed client traffic doesn't betray tethering by TTL decrement |
+| 🔑 | **Host-key rotation** | SSH host keys and the LuCI TLS cert regenerated — permanent identifiers that survive every lesser rotation |
+| 🩺 | **Health check** | `norypt-ghost check` — read-only self-test of modem, generator, services, and the no-logs guarantee; non-zero exit on failure |
+| 🖥️ | **Three control surfaces** | CLI over SSH, a LuCI admin page, and a 2-second touchscreen long-press |
+| 📶 | **Network visibility** | Per-slot registration state, operator, and signal in both CLI and LuCI |
+| 🖼️ | **Splash screens** | Six full-screen status frames written straight to the framebuffer during operations |
 
 ---
 
@@ -79,33 +140,29 @@ Norypt Ghost is derived from [blue-merle-v2](https://github.com/WSchlesner/blue-
 | **Firmware** | GL.iNet 4.8.3 (OpenWrt 23.05.4) and 4.8.5 |
 | **Modem firmware** | `RG650VNA01ACR02A04G8G` (unchanged between 4.8.3 and 4.8.5) |
 | **Architecture** | `aarch64_cortex-a53` |
-| **Dependencies** | `luci-base`, `lua`, `luabitop` — all present in stock firmware |
+| **Required deps** | `luci-base`, `lua`, `luabitop`, `jsonfilter` — all present in stock firmware |
+| **Optional deps** | `openssl-util` (enables sealed factory state) · `qrencode` + `fbv`/`fbi` (on-screen join QR) |
 
-The installer verifies the device model and firmware version before touching anything. Unknown firmware versions prompt for confirmation (interactive SSH installs only; non-interactive installs on unknown firmware abort safely).
+The installer verifies the device model and firmware version before touching anything. Unknown firmware prompts for confirmation on interactive SSH installs; non-interactive installs on unknown firmware abort safely.
 
-> **Firmware upgrades remove the package without running its uninstall hooks.** Factory state survives in `/etc/config/norypt-ghost`, but the modem keeps its rotated IMEIs and GL-iNet's own BSSID randomization stays disabled until you reinstall Norypt Ghost (or restore manually). Reinstall after every firmware upgrade.
+> **Firmware upgrades remove the package without running its uninstall hooks.** Factory state survives in `/etc/config/norypt-ghost`, but the modem keeps its rotated IMEIs and GL-iNet's own BSSID randomization stays disabled until you reinstall. Reinstall after every firmware upgrade.
 
 ---
 
 ## Quick Start
 
-**1. Enable LuCI** (bundled with the firmware, off by default — no internet required):
+**1 — Enable LuCI** (bundled with the firmware, off by default, no internet required):
 
-1. Open the GL-iNet web UI at `http://192.168.8.1`
-2. Go to **System → Advanced Settings**
-3. Click **Install Now** — this just starts the `uhttpd` web server
-4. LuCI is now at `http://192.168.8.1:8080`
+Open `http://192.168.8.1` → **System → Advanced Settings** → **Install Now**. LuCI is then at `http://192.168.8.1:8080`.
 
-**2. Install the package:**
+**2 — Install the package:**
 
 ```sh
 scp -O norypt-ghost_1.0.0-Script-Local.ipk root@192.168.8.1:/tmp/
 ssh root@192.168.8.1 opkg install /tmp/norypt-ghost_1.0.0-Script-Local.ipk
 ```
 
-Expected output (identifiers below are illustrative placeholders):
-
-```
+```console
 Installing norypt-ghost (1.0.0) to root...
 Firmware 4.8.5 confirmed supported.
 Configuring norypt-ghost.
@@ -117,20 +174,22 @@ norypt-ghost: capturing factory state...
   Hostname:        GL-E5800
   WiFi keys saved: main + guest
 norypt-ghost: factory state saved to /etc/config/norypt-ghost
-norypt-ghost: installation complete. Rotate identity via: norypt-ghost rotate
+norypt-ghost: installation complete. Rotate identity via: norypt-ghost new-identity
 ```
 
-The original device identity is captured **once** at install time and is never overwritten — reinstalls and upgrades (`opkg install --force-reinstall`) preserve it.
+If `openssl` is present you'll be prompted for a **sealing passphrase** — this encrypts your real identity on flash. Choose one you will not lose: there is no recovery. See [Sealed factory state](#sealed-factory-state).
 
-**3. Verify and rotate:**
+The original identity is captured **once** and never overwritten — reinstalls and `--force-reinstall` preserve it.
+
+**3 — Verify, then rotate:**
 
 ```sh
 ssh root@192.168.8.1
-norypt-ghost check     # everything should PASS
-norypt-ghost rotate    # first identity rotation
+norypt-ghost check          # everything should PASS
+norypt-ghost new-identity   # full clean rotation (reboots)
 ```
 
-The admin page is under **Services → Norypt Ghost** in LuCI.
+The admin page lives under **Services → Norypt Ghost** in LuCI.
 
 ---
 
@@ -142,46 +201,35 @@ The admin page is under **Services → Norypt Ghost** in LuCI.
 
 | Section | Contents |
 |---|---|
-| **IMEI** | Current vs. factory IMEI per slot, IMSI, and live network state (registration / operator / signal — loaded asynchronously). Rotated values are highlighted green. |
-| **Wireless/System Identity** | Current vs. factory SSID, all nine MACs/BSSIDs, hostname, and the main/guest Wi-Fi passwords (masked, with Show/Hide). |
-| **Rotation Options** | Boot-rotation master toggle + per-feature checkboxes; per-slot IMEI mode radios (Random / Deterministic / Static) with inline-validated static IMEI fields; re-attach timeout; touchscreen trigger toggle. Every control saves instantly with a ✓ flash. |
-| **Actions** | Rotate IMEIs, Rotate Wireless/System, SIM Swap (double-confirmed — powers the device off), Restore Factory. Last-rotation timestamps below. |
-| **Last Command Log** | Output of the most recent operation (`/tmp/norypt-ghost.log`). |
+| **Actions** | **New Identity** (primary, double-confirmed — full rotation + reboot), then the advanced partial actions: Rotate IMEIs, Rotate Wireless/System, SIM Swap, Restore Factory |
+| **IMEI** | Current vs. factory IMEI per slot, IMSI, and live network state (registration / operator / signal, loaded asynchronously). Rotated values highlighted |
+| **Wireless/System Identity** | Current vs. factory SSID, all nine MACs/BSSIDs, hostname, and the main/guest passwords (masked, with Show/Hide) |
+| **Rotation Options** | Boot-rotation master toggle + per-feature checkboxes; per-slot IMEI mode radios with inline-validated static fields; RAT lock; default region; factory-seal state; re-attach timeout; touchscreen trigger. Every control saves instantly |
+| **Last Command Log** | Output of the most recent operation (`/tmp/norypt-ghost.log`) |
 
-> Screenshots are intentionally not committed: the admin page displays live IMEIs, IMSIs, and BSSIDs, and a screenshot of a real unit publishes them permanently.
+> Screenshots are intentionally not committed — the admin page displays live IMEIs, IMSIs, and BSSIDs, and publishing a real unit's would expose them permanently.
 
 ### Command line
 
 ```sh
+norypt-ghost new-identity      # ⭐ full clean rotation: new profile, every identifier, reboot
 norypt-ghost status            # identity + network registration overview
 norypt-ghost check             # health check (see below)
-norypt-ghost rotate            # rotate both IMEIs, cycle RF, wait for re-attach
-norypt-ghost rotate-wireless   # rotate MACs/SSID/hostname/password immediately
-norypt-ghost new-identity      # full clean rotation: new profile, every identifier, reboot
+norypt-ghost rotate            # partial, live: rotate both IMEIs only
+norypt-ghost rotate-wireless   # partial, live: rotate MACs/SSID/hostname/password only
 norypt-ghost sim-swap          # stage 1 of the SIM-swap flow (powers off!)
 norypt-ghost restore           # restore every factory value
 norypt-ghost install           # (re-)capture factory state — idempotent
 norypt-ghost help              # full usage, including per-slot mode flags
 ```
 
-Per-slot IMEI modes can be set for a single run (`--slot1=deterministic --slot2=random`, or `--random`/`--deterministic`/`--static` for both) — invalid modes and unknown options fail loudly rather than silently falling back. Persistent mode defaults live in UCI (see [Configuration Reference](#configuration-reference)).
+`rotate` and `rotate-wireless` are **partial, live** operations — handy for a quick refresh, but each leaves the other layer as a linking handle. Use `new-identity` for a real break.
 
-Example `rotate`:
-
-```
-norypt-ghost: disabling RF before IMEI write...
-norypt-ghost: generating IMEIs (slot1=random, slot2=random)...
-  Slot 1 IMEI: <generated>
-  Slot 2 IMEI: <generated>
-  Slot 1 IMEI confirmed: <generated>
-  Slot 2 IMEI confirmed: <generated>
-norypt-ghost: cycling modem RF for network re-attach...
-norypt-ghost: done.
-```
+Per-slot IMEI modes can be set for a single run (`--slot1=deterministic --slot2=random`, or `--random` / `--deterministic` / `--static` for both). Invalid modes fail loudly rather than silently falling back. Persistent defaults live in UCI.
 
 `status` includes a Network section — the first place to look when a SIM won't connect:
 
-```
+```console
 === Network ===
   Slot 1 registration: registered (home)
   Slot 2 registration: not registered (idle)
@@ -191,21 +239,21 @@ norypt-ghost: done.
 
 ### Touchscreen trigger
 
-Hold the **clock in the top-left corner** of the home screen for **2 seconds** to start a SIM swap — identical to running `norypt-ghost sim-swap` over SSH, no laptop needed.
+Hold the **clock in the top-left corner** for **2 seconds** to start a SIM swap — identical to `norypt-ghost sim-swap` over SSH, no laptop needed.
 
-The `norypt-ghost-touch` daemon (a small statically linked C binary, source in `src/`) reads `/dev/input/event0` without grabbing it, so the stock `gl_screen` UI keeps working normally. Guards against accidental triggers:
+The `norypt-ghost-touch` daemon (a small statically linked C binary, source in `src/`) reads `/dev/input/event0` *without* grabbing it, so the stock `gl_screen` UI keeps working. Guards against accidents:
 
 - 2-second hold required — quick taps are logged and ignored
 - 10-second cooldown between triggers
-- Blocked while a sim-swap is already in progress (stage file present)
+- Blocked while a sim-swap is already in progress
 
-Toggle it (persists across reboots and reinstalls) from LuCI → Rotation Options → **Touchscreen Trigger**, or over SSH: `/etc/init.d/norypt-ghost-touch disable && /etc/init.d/norypt-ghost-touch stop`.
+Toggle from LuCI → Rotation Options → **Touchscreen Trigger**, or `/etc/init.d/norypt-ghost-touch disable && /etc/init.d/norypt-ghost-touch stop`.
 
 ### Health check
 
 `norypt-ghost check` is a read-only self-test — run it any time something seems off, or after a firmware update:
 
-```
+```console
 === norypt-ghost health check ===
 
 Modem:
@@ -216,8 +264,8 @@ Modem:
 
 IMEI generator:
   PASS  lua generator produces valid IMEIs (sample: <generated>)
-  PASS  TAC pool present (7 TACs)
-  PASS  OUI pool present (20 router identities)
+  PASS  TAC pool present
+  PASS  OUI pool present
 
 Splash frames:
   PASS  all 6 frames present
@@ -238,7 +286,7 @@ State:
 Result: all checks passed.
 ```
 
-Exit code is non-zero if anything FAILs, so it can be scripted.
+**Exit code is non-zero if anything FAILs** — including a broken no-logs guarantee — so it works as a scripted gate.
 
 ---
 
@@ -246,127 +294,160 @@ Exit code is non-zero if anything FAILs, so it can be scripted.
 
 ### What it protects (and what it can't)
 
-Norypt Ghost reduces the **device-identity** trail a mobile hotspot leaves behind: the IMEI broadcast to cell towers, the Wi-Fi MACs/BSSIDs/SSID visible to anyone scanning nearby, the hostname, and the on-flash history of clients that connected. It cannot anonymize what it doesn't control:
+Norypt Ghost reduces the **device-identity** trail a mobile hotspot leaves: the IMEI broadcast to towers, the MACs/BSSIDs/SSID visible to anyone scanning, the hostname, the host keys, and the on-flash record of who connected. It cannot anonymize what it doesn't control:
 
-- **The SIM is an identity.** The IMSI/ICCID identify the subscriber regardless of IMEI. Rotating the IMEI without swapping the SIM only unlinks the *hardware*; use the SIM-swap flow (new SIM + new IMEI + new location, together) for a clean break.
-- **The eSIM EID is permanent.** The eUICC's EID is a fixed hardware identifier presented during remote SIM provisioning and cannot be rotated.
-- **Location and usage patterns correlate.** Re-appearing in the same place, at the same times, with the same traffic patterns can re-link identities no rotation can hide.
-- **Upstream traffic is out of scope.** Use a VPN/Tor on top; Norypt Ghost handles the radio identity layer only.
+| Out of scope | Why |
+|---|---|
+| **The SIM itself** | IMSI/ICCID identify the subscriber regardless of IMEI. Rotating the IMEI alone unlinks only the *hardware* — use the [SIM-swap flow](#sim-swap-flow) for a clean break |
+| **The eSIM EID** | A fixed hardware identifier of the eUICC, presented during remote provisioning. Not rotatable |
+| **Location & behavior** | Reappearing in the same place, at the same times, with the same traffic patterns re-links identities no rotation can hide |
+| **Upstream traffic** | Norypt Ghost handles the radio-identity layer only. Use a VPN/Tor on top |
 
-The deterministic IMEI mode trades unlinkability for consistency — see [IMEI modes](#imei-modes).
+The deterministic IMEI mode deliberately trades unlinkability for consistency — see [IMEI modes](#imei-modes).
+
+### `new-identity`: the full clean rotation
+
+The single command that changes **everything at once**, across a clean reboot:
+
+1. **Picks a whole coherent device profile** from `profiles.json` — vendor, Wi-Fi OUI, client OUI, SSID/hostname/password format, region, and a matching verified TAC. Not independent random fields, so the result can never show one vendor's SSID over another's OUI.
+2. **Stages the wireless + system identity** into UCI: all six AP BSSIDs (profile's Wi-Fi OUI), the repeater STA MAC (client OUI), the **wired** WAN/LAN MAC, SSID + guest SSID, both passwords, hostname, and the DHCP hostname sent upstream.
+3. **Regenerates SSH host keys and the LuCI TLS cert** — permanent device identifiers that survive `rotate`/`rotate-wireless` untouched.
+4. **Stages the new IMEIs** for both slots, drawn from the profile's TAC.
+5. **Shows the join credentials** — a `WIFI:` QR on the device screen (when `qrencode` + a framebuffer viewer are installed) plus the plain SSID/password on the console, so you can rejoin immediately.
+6. **Reboots.** The staged IMEIs are written at S25, *before* RF and the modem's first attach are re-enabled — the modem never attaches on the old identity. Because it's a reboot, all RAM-resident correlation state (client-MAC DB, DHCP leases, ARP/conntrack, in-memory log) is gone too.
+
+> **Precision:** unlike the two-stage SIM-swap flow, `new-identity` does not write a *pre-reboot throwaway* IMEI. The modem's NV briefly still holds the old IMEI between shutdown and the S25 rewrite — it simply never transmits with it, because RF stays off until after the rewrite.
+
+### IMEI realism: the profile catalog
+
+`files/usr/share/norypt-ghost/profiles.json` is the heart of the disguise. Each entry is one complete, coherent real-device archetype:
+
+```jsonc
+{
+  "id": "apple-iphone-15-pro-eu",
+  "class": "phone", "region": "EU", "vendor": "Apple",
+  "imei_tacs": [
+    { "tac": "35937079", "device": "Apple iPhone 15 Pro (A3102, intl)",
+      "verified": true, "source": "https://swappa.com/imei/info/359370797011487" }
+  ],
+  "wifi_oui":   ["3C:22:FB", "40:98:AD", "88:66:5A"],
+  "client_oui": ["F4:D4:88", "AC:DE:48"],
+  "ssid_format": "iPhone",
+  "hostname_format": "iPhone",
+  "bands": ["n1", "n3", "n7", "n28", "n78"]
+}
+```
+
+Design rules, enforced automatically:
+
+- **Phone-only.** The device presents as a popular smartphone tethering its SIM — a far larger anonymity set than any single hotspot model, and it reads as a phone on the carrier's network.
+- **Every TAC verified.** Each is the real first-8 digits of a genuine device IMEI from a public registry, with the source URL stored per entry. **CI fails the build** if any TAC is ever left unverified (`tests/run.sh --release`).
+- **Vendor coherence by construction.** A validator asserts that the IMEI TAC vendor, the Wi-Fi OUI vendor, and the SSID all name the same device — and that `wifi_oui` and `client_oui` never overlap, because a real phone doesn't use its own AP OUI for its upstream client interface.
+- **Universally-administered OUIs only**, checked bit-by-bit (a locally-administered value in the pool would mean it was never a real vendor allocation).
+- **Region-aware.** The SIM's IMSI MCC selects the EU or NA pool at rotation time, so the IMEI is plausible for the network the SIM actually belongs to; `default_region` covers an unreadable SIM.
 
 ### Boot sequence
 
 | Priority | Service | What it does |
 |---|---|---|
-| S9 | `norypt-ghost-clean` | Before GL-iNet's client tracker and telemetry daemons start: RAM-backs the syslog, `tmpfs`-mounts every present telemetry directory, and disables dnsmasq query logging/caching — see [No persistent connected-device logs](#no-persistent-connected-device-logs). |
-| S10 | `norypt-ghost-wireless` | If boot rotation is enabled: rotates MACs, SSID, hostname, and Wi-Fi passwords *before* the APs come up. |
-| S23 | `gl_cellular_manager` | GL-iNet's modem init daemon — the first point in boot where the AT socket accepts commands. |
-| S25 | `norypt-ghost-sim-swap` | Only when a sim-swap or a staged `new-identity` is pending: waits for the AT socket, disables RF, writes the final IMEIs, applies the RAT lock, re-enables RF. The throwaway IMEI from Stage 1 is replaced before the modem ever attaches. Exits instantly on normal boots. |
-| S45 | `norypt-ghost-ttl` | Normalizes egress TTL/hop-limit to 64 (`nft`, falling back to `iptables`/`ip6tables`) so NATed client traffic looks device-originated — defeats TTL-based tethering detection. |
-| S80 | `gl_screen` | GL-iNet's touchscreen UI daemon. |
-| S81 | `norypt-ghost-touch` | The long-press trigger daemon (procd-managed, auto-respawns). |
+| **S9** | `norypt-ghost-clean` | Before any GL-iNet tracker starts: RAM-backs the syslog, `tmpfs`-mounts every present telemetry directory, disables dnsmasq query logging/caching |
+| **S10** | `norypt-ghost-wireless` | Boot rotation of MACs/SSID/hostname/passwords — *skipped* when a `new-identity` is staged, so it never clobbers the coherent identity |
+| **S23** | `gl_cellular_manager` | GL-iNet's modem init — the first point where the AT socket accepts commands |
+| **S25** | `norypt-ghost-sim-swap` | When a sim-swap **or** a staged `new-identity` is pending: waits for the AT socket, RF off, writes the final IMEIs, regenerates host keys, applies the RAT lock, RF on. Exits instantly on normal boots |
+| **S45** | `norypt-ghost-ttl` | Normalizes egress TTL/hop-limit to 64 (`nft`, falling back to `iptables`/`ip6tables`) |
+| **S80** | `gl_screen` | GL-iNet's touchscreen UI daemon |
+| **S81** | `norypt-ghost-touch` | The long-press trigger daemon (procd-managed, auto-respawns) |
 
 ### IMEI rotation
 
-1. RF off (`AT+CFUN=4`) — the old IMEI stops transmitting before anything is written
+1. **RF off** (`AT+CFUN=4`) — the old IMEI stops transmitting before anything is written
 2. Both slots written via `AT+EGMR` (field 7 = Slot 1, field 11 = Slot 2/eSIM), NV-persisted with `AT+QPRTPARA=1`
-3. RF on (`AT+CFUN=1`) + automatic operator re-attach (`AT+COPS=0`)
+3. **RF on** (`AT+CFUN=1`) + automatic operator re-attach (`AT+COPS=0`)
 4. Registration polled via `AT+CEREG?` until attached or the configured timeout (default 120 s)
 5. `gl_cellular_manager` restarted so GL-iNet's cached IMEI (Settings → About Device) matches the modem
 
-A re-attach timeout is **non-fatal**: the warning screen is shown, RF stays on, and the modem keeps retrying in the background — relevant for factory-fresh SIMs whose first activation can take the carrier several minutes.
+A re-attach timeout is **non-fatal**: the warning screen shows, RF stays on, and the modem keeps retrying — relevant for factory-fresh SIMs whose first activation can take the carrier minutes.
 
-If a *write* fails, Norypt Ghost deliberately leaves RF **off** rather than transmitting a half-rotated identity, shows the error screen, and prints recovery steps (re-run, `norypt-ghost restore`, or `gl_modem -B CPU -U 1 AT 'AT+CFUN=1'` to force RF back on).
+If a *write* fails, Norypt Ghost deliberately leaves RF **off** rather than transmit a half-rotated identity, shows the error screen, and prints recovery steps.
 
 ### IMEI modes
 
-**Random** (default) — a TAC from `tac_pool.json` + 6 random serial digits + Luhn check digit. The pool is curated to 5G sub-6 hotspots/handsets whose band sets overlap the RG650V-NA's (n2/n5/n12/n25/n41/n66/n70/n71/n77/n78). This matters: carriers can compare a reported IMEI's expected capabilities against the cell it connects on, and a 4G-only TAC on a 5G NR cell is a contradiction — confirmed on real hardware to trigger ~10 Mbps throttling on at least one US carrier. Don't add LTE-only TACs to the pool.
+| Mode | Behavior | Trade-off |
+|---|---|---|
+| **Random** *(default)* | A TAC from the pool + 6 rejection-sampled serial digits + Luhn check digit | Best unlinkability |
+| **Deterministic** | `luhn(tac[djb2(IMSI) % n] + serial(djb2(IMSI)))` — the same SIM always maps to the same IMEI | Useful when a carrier flags frequent IMEI changes, but djb2 is a *public, unkeyed* hash: anyone who once observes the IMEI↔IMSI pairing can re-derive it forever |
+| **Static** | A user-supplied 15-digit IMEI, Luhn-validated client- *and* server-side | Written verbatim on every rotation |
 
-**Deterministic** — `IMEI = luhn(tac_pool[djb2(IMSI) % n] + serial(djb2(IMSI)))`. The same SIM always maps to the same IMEI, useful when a carrier flags frequent IMEI changes on one subscription. **Privacy trade-off:** djb2 is a public, unkeyed hash — anyone who once observes the IMEI+IMSI pairing can re-derive the link forever. Random is strictly better for unlinkability. (Keying this hash with a per-install secret is on the [Roadmap](#roadmap).)
+All three fall back to Random (with a warning) if their inputs are unavailable, so a rotation never fails on a missing IMSI or unset static value.
 
-**Static** — a user-supplied 15-digit IMEI, Luhn-validated in the LuCI form *and* server-side. Written verbatim on every rotation.
-
-All three fall back to Random (with a warning) if their inputs are unavailable, so a rotation never fails because of a missing IMSI or an unset static value.
+**Band matching matters.** Carriers can compare a reported IMEI's expected capabilities against the cell it connects on — a 4G-only TAC on a 5G NR cell is a contradiction, confirmed on real hardware to trigger ~10 Mbps throttling on at least one carrier. Every catalog profile records its band set for exactly this reason.
 
 ### SIM-swap flow
 
 The problem with a naive swap: if the modem ever holds *old SIM + new IMEI* (or vice versa), the two identities become linkable. Norypt Ghost splits the swap across a power cycle so they never coexist on air:
 
-1. **Stage 1** (`norypt-ghost sim-swap`, touchscreen, or LuCI): RF off → random **throwaway** IMEIs written to both slots → state saved → device powers off
-2. You swap SIM(s) — and ideally location — while it's off
-3. **Stage 2** (S25, automatic on next boot): final IMEIs (per your configured modes) are written *before* the modem's first attach; the throwaway IMEIs never register
+1. **Stage 1** (`sim-swap`, touchscreen, or LuCI) — RF off → random **throwaway** IMEIs written to both slots → state saved → device powers off
+2. **You swap SIM(s)** — and ideally location — while it's off
+3. **Stage 2** (S25, automatic) — the final IMEIs are written *before* the modem's first attach; the throwaway IMEIs never register
 
-If Stage 2 can't reach the modem it leaves the pending state in place and retries next boot — the modem keeps the harmless throwaway identity in the meantime.
+If Stage 2 can't reach the modem it leaves the pending state and retries next boot — the modem keeps the harmless throwaway identity meanwhile.
 
 ### MAC, BSSID, and SSID randomization
 
-Every rotation picks **one router identity** — a single vendor OUI plus its SSID brand — from the curated pool in `oui_pool.json`:
+There are two paths, and they differ deliberately:
 
-- All six AP interfaces (`wifi2g/5g/6g` + guests) get that one OUI with random NIC bytes, like a real consumer router. Mixing vendors across bands is a fingerprinting flag no real device exhibits.
-- The SSID becomes `<brand>-XXXX` to match (e.g., a Netgear OUI broadcasts `NETGEAR-A3F1`). Vendors whose factory SSIDs aren't brand-prefixed (Google Nest, Meraki) use a generic `HOME-XXXX`, plausible with any OUI.
-- The **STA (repeater) interface** gets a *client*-class OUI (Apple/Intel/Samsung laptops and phones) — upstream networks see a client device, not a router.
-- The **locally-administered bit** is forced on every generated MAC: the Qualcomm `ath11k` driver requires LA MACs for runtime channel changes on AP interfaces (GL-iNet's channel co-location in repeater mode breaks with UA MACs). **This has a cost** — an LA bit is itself a randomization signal to anyone scanning. See [Roadmap](#roadmap).
+**`new-identity` (recommended)** draws everything from one phone profile — all six AP interfaces share the profile's vendor OUI, the repeater STA gets a client-class OUI, and the SSID is that phone's hotspot name (`iPhone`, `Galaxy-S24-A3F1`).
 
-GL-iNet's own `random_bssid` feature is disabled at install (it generates UA MACs on its own schedule) and re-enabled at uninstall. Hostname becomes `router-XXXX`; main and guest networks get independent random 12-hex-character passwords.
+**`rotate-wireless` / boot rotation (partial, live)** uses the legacy curated router pool in `oui_pool.json`: one router vendor per rotation, all BSSIDs sharing its OUI, SSID `<brand>-XXXX` to match (vendors whose factory SSIDs aren't brand-prefixed use a generic `HOME-XXXX`).
 
-### `new-identity`: full clean rotation
+Common to both:
 
-`rotate` and `rotate-wireless` are documented as *partial, live* operations — each changes one layer while the device keeps running, which is useful for quick refreshes but leaves the other layer as a linking handle across the boundary. `norypt-ghost new-identity` closes that gap: it is the single command that changes **everything at once**, across a clean reboot, and it's the recommended action whenever you want a real break between sessions.
-
-One run does all of the following:
-
-1. Picks a whole coherent device profile from `usr/share/norypt-ghost/profiles.json` (vendor, wifi/client OUI, SSID/hostname/password format, region, and a matching TAC) — not independent random fields, so the result can't show a NETGEAR SSID over an Apple OUI.
-2. Stages new BSSIDs/MACs (including the wired MAC), SSID, hostname, and Wi-Fi passwords into UCI immediately.
-3. Regenerates the SSH host keys and the LuCI TLS cert — both are permanent device identifiers that survive `rotate`/`rotate-wireless` untouched.
-4. Stages the new IMEIs for both slots.
-5. Prints (and, if `qrencode` plus a framebuffer viewer are installed, renders on the device screen) a `WIFI:` join QR and the plain SSID/password, so you can rejoin the new network immediately after reboot.
-6. Reboots with RF disabled. The new IMEIs are written *before* RF (and the modem's first attach) is re-enabled on the next boot (the same S25 ordering the SIM-swap flow relies on), so the modem never attaches on the old identity. Note: unlike the two-stage SIM-swap flow, `new-identity` does not write a pre-reboot throwaway IMEI — the modem's own NV storage briefly still holds the old IMEI between shutdown and the S25 rewrite, it just never attaches with it, because RF stays off until after the rewrite.
-
-```
-norypt-ghost: staging new device identity...
-  Profile: netgear-nighthawk-m6-na
-  SSID:    NETGEAR-A3F1
-norypt-ghost: rebooting in 5s to apply the new identity cleanly.
-  Scan the QR on the device screen to rejoin Wi-Fi.
-```
+- **The locally-administered bit is forced** on every generated MAC. The Qualcomm `ath11k` driver requires LA MACs for runtime channel changes on AP interfaces. With the phone profiles this is *authentic* — modern phones randomize their own SoftAP BSSID the same way.
+- **GL-iNet's `random_bssid` is disabled at install** (it generates its own MACs on its own schedule) and re-enabled at uninstall.
+- Main and guest networks get **independent** random passwords.
 
 ### RAT lock (2G/3G downgrade block)
 
-The classic IMSI-catcher technique is a **downgrade**: force the handset onto 2G, where mutual authentication is absent and encryption is weak or off. Every identity apply (boot, `new-identity`, sim-swap Stage 2) now issues `AT+QNWPREFCFG="mode_pref",NR5G:LTE` — locking the modem to 5G NR / LTE only, so it can no longer silently fall back to GSM.
+The classic IMSI-catcher technique is a **downgrade**: force the device onto 2G, where mutual authentication is absent and encryption is weak or off. Every identity apply (boot, `new-identity`, sim-swap Stage 2) issues:
 
-Controlled by `norypt-ghost.options.rat_lock` (default **on**). Turn it off from LuCI or `uci set norypt-ghost.options.rat_lock=0 && uci commit norypt-ghost` for regions with no LTE coverage.
+```
+AT+QNWPREFCFG="mode_pref",NR5G:LTE
+```
 
-### Volatile client MACs
-
-GL-iNet's `gl_clients` daemon keeps a persistent database of every client MAC that ever connected, at `/etc/oui-tertf/client.db` on flash. At S9 Norypt Ghost deletes the on-flash copy and mounts a `tmpfs` over the directory — the daemon keeps writing without knowing it's writing to RAM, and the history starts empty every boot.
-
-(The old file is unlinked, not overwritten: the Mudi 7's overlay is ext4 on eMMC, whose flash translation layer remaps writes — overwrite-in-place tools like `shred` are ineffective there. The tmpfs mount is the real protection.)
+— locking the modem to 5G NR / LTE, so it can no longer silently fall back to GSM. Controlled by `rat_lock` (default **on**); disable it from LuCI or UCI for regions without LTE coverage.
 
 ### No persistent connected-device logs
 
-The volatile-MAC protection above was broadened into a general **no-connected-device-logs guarantee**, applied by the `norypt-ghost-clean` service before any of GL-iNet's tracking daemons start:
+Applied by `norypt-ghost-clean` at **S9**, before any tracking daemon starts:
 
-- **System log stays in RAM.** Any flash `log_file` configured under `system.@system[0]` is unset — `logread` still works, but nothing is written to flash.
-- **`tmpfs` mounted over every telemetry directory present**, not just the client-MAC database: `/etc/oui-tertf` (client tracker), `/var/lib/nlbwmon` (bandwidth monitor), `/etc/vnstat` and `/var/lib/vnstat` (traffic stats). Each daemon keeps writing, believing it's on flash; the data evaporates at every reboot.
-- **dnsmasq** runs with `logqueries=0` and `cachelocal=0` — no per-client DNS query log, no persisted local cache.
-- **DHCP leases forced to `/tmp`** if GL-iNet's build ever points `leasefile` at flash.
+- **System log stays in RAM.** Any flash `log_file` under `system.@system[0]` is unset — `logread` still works, nothing hits flash.
+- **`tmpfs` over every telemetry directory present** — `/etc/oui-tertf` (client-MAC tracker), `/var/lib/nlbwmon` (bandwidth monitor), `/etc/vnstat` and `/var/lib/vnstat` (traffic stats). Each daemon keeps writing, believing it's on flash; the data evaporates every reboot.
+- **dnsmasq** runs with `logqueries=0` and `cachelocal=0` — no per-client DNS query log, no persisted cache.
+- **DHCP leases forced to `/tmp`** if the firmware ever points `leasefile` at flash.
 
-`norypt-ghost check` reports pass/fail for each of these independently, and `norypt-ghost-clean stop` (run automatically on package removal) clears the RAM copies before the service exits — nothing about a connected device's history is ever written to durable storage on a Norypt Ghost install.
+The pre-existing on-flash client database is unlinked at first run. *(It is unlinked, not overwritten: the Mudi 7's overlay is ext4 on eMMC, whose flash translation layer remaps writes, so overwrite-in-place tools like `shred` are ineffective. The tmpfs mount is the real protection.)*
+
+`norypt-ghost check` reports each of these independently **and fails its exit code** if any is violated. `norypt-ghost-clean stop` (run automatically on removal) clears the RAM copies before exiting.
 
 ### Sealed factory state
 
-The `factory` UCI section is what makes `restore` and clean uninstalls possible — but it's also a complete recovery key for the real identity the tool exists to hide, and by default it lived in cleartext, forever. **Sealed factory state** closes that: when `openssl` is available (the default, `factory_mode=sealed`), the entire `factory` section is AES-256-CBC-encrypted (PBKDF2, 200k iterations) behind a passphrase you set at install time, and the plaintext is discarded immediately after sealing.
+The `factory` UCI section is what makes `restore` and clean uninstalls possible — but it is also a complete recovery key for the very identity the tool exists to hide, and by default it lived in cleartext forever.
 
-What that means in practice:
+When `openssl` is available (`factory_mode=sealed`, the default), the entire section is **AES-256-CBC encrypted** (PBKDF2, 200 000 iterations) behind a passphrase set at install, and the plaintext is discarded immediately after sealing.
 
-- **Restore is SSH-only.** A sealed restore needs a human to type the passphrase at a terminal. Non-interactive callers — `opkg remove`'s `prerm`, a backgrounded LuCI restore click — refuse outright with a clear message instead of silently leaving the device half-restored or prompting into nowhere. Run `norypt-ghost restore` from an interactive SSH session when you need the factory identity back.
-- **Forgetting the passphrase means no restore, period.** There is no recovery mechanism and no backdoor — that's the point. Wrong passphrase or a corrupted blob aborts the restore with RF left untouched, rather than writing garbage IMEIs.
-- **Falls back to plain automatically** when `openssl` isn't installed, or when `factory_mode=plain` is explicitly set — behavior (and risk) then match the original cleartext design exactly, with no silent capability loss.
+- **Restore is SSH-only.** A sealed restore needs a human at a terminal. Non-interactive callers — `opkg remove`'s `prerm`, a backgrounded LuCI restore — refuse outright with a clear message rather than hanging on an invisible prompt or half-restoring. On a sealed device, `opkg remove` warns that the modem keeps its current identity and tells you to run `norypt-ghost restore` yourself.
+- **Forgetting the passphrase means no restore, period.** No recovery, no backdoor — that's the point. A wrong passphrase aborts with RF untouched rather than writing garbage IMEIs.
+- **Falls back to plain automatically** when `openssl` isn't installed or `factory_mode=plain` is set — matching the original cleartext behavior exactly, with a loud warning and no silent capability loss.
+
+### TTL normalization
+
+Carriers detect tethering partly by TTL: packets forwarded through a router arrive one hop "shorter" than packets originated by the phone itself. An IMEI claiming to be an iPhone, contradicted by visibly-forwarded traffic, is a weak disguise.
+
+`norypt-ghost-ttl` (S45) pins egress IPv4 TTL and IPv6 hop-limit to **64** via `nft`, falling back to `iptables`/`ip6tables` — so NATed client traffic looks device-originated.
 
 ### Splash screens
 
-During operations, Norypt Ghost stops `gl_screen` and writes pre-rendered frames (240×320 RGB565) directly to `/dev/fb0`:
+During operations Norypt Ghost stops `gl_screen` and writes pre-rendered 240×320 RGB565 frames straight to `/dev/fb0`:
 
 | | | |
 |:---:|:---:|:---:|
@@ -375,24 +456,24 @@ During operations, Norypt Ghost stops `gl_screen` and writes pre-rendered frames
 
 | Frame | Shown when |
 |---|---|
-| `rotating` | IMEI rotation or sim-swap Stage 2 in progress |
+| `rotating` | IMEI rotation, `new-identity` apply, or sim-swap Stage 2 in progress |
 | `done` | Operation complete and modem re-registered |
 | `simswap` | Stage 1: powering off for the SIM swap |
 | `restoring` | Factory restore in progress |
-| `warning` | Soft failure: IMEIs written but no re-registration within the timeout (modem keeps retrying) |
+| `warning` | Soft failure: IMEIs written but no re-registration within the timeout |
 | `error` | Hard failure: a write failed; **RF is left off** until recovered |
 
-Frames are generated by `screens/generate.py` (Python 3 + Pillow, dev-side only — the device never needs Python) and committed as binaries. To modify: edit the `FRAMES` list, run `python3 generate.py`, commit the regenerated `.rgb565` files and PNG previews.
+Frames are generated by `screens/generate.py` (Python 3 + Pillow, dev-side only — the device never needs Python) and committed as binaries.
 
-Implementation note: `gl_screen` respawns via procd, so a plain `stop` would repaint over our frame within seconds — `_screen_splash` first removes it from procd's watch list (`ubus call service delete`), then stops it, then writes the frame. A separate GL-iNet boot process draws a progress bar at a fixed screen position during early boot; the `rotating`/`done` layouts leave that row empty so Stage 2 splashes aren't overdrawn.
+*Implementation note:* `gl_screen` respawns via procd, so a plain `stop` would repaint over the frame within seconds — the splash helper first removes it from procd's watch list, then stops it, then writes. A separate GL-iNet boot process draws a progress bar at a fixed row; the `rotating`/`done` layouts leave that row empty so Stage 2 splashes aren't overdrawn.
 
 ---
 
 ## Configuration Reference
 
-Everything lives in `/etc/config/norypt-ghost` (standard UCI). The `factory` section is written once at install; the `options` section is yours:
+Everything lives in `/etc/config/norypt-ghost` (standard UCI). The `factory` section is written once at install; `options` is yours:
 
-```
+```sh
 config norypt-ghost 'options'
     option randomize_on_boot    '1'        # rotate wireless identity at every boot
     option randomize_mac        '1'        # per-feature toggles for boot + rotate-wireless
@@ -410,17 +491,17 @@ config norypt-ghost 'options'
     option default_region       'NA'       # NA | EU — profile region when no SIM/MCC is readable
 ```
 
-All values are editable from the LuCI page (changes apply instantly) or via `uci set norypt-ghost.options.<name>=<value> && uci commit norypt-ghost`. Every value is validated server-side — malformed input is rejected, never written to the modem.
+All values are editable from LuCI (applied instantly) or via `uci set norypt-ghost.options.<name>=<value> && uci commit norypt-ghost`. Every value is validated server-side — malformed input is rejected, never written to the modem.
 
-> **The `factory` section stores your device's real IMEIs, MACs, SSIDs and Wi-Fi keys.** By default (`factory_mode=sealed`, requires `openssl`) it is encrypted behind a passphrase you set at install — see [Sealed factory state](#sealed-factory-state). With `factory_mode=plain`, or when `openssl` isn't installed, it falls back to the original cleartext-on-flash behavior: that's what makes `restore` and clean uninstalls possible, but it also means anyone with the device recovers its true identity.
+> **The `factory` section stores your device's real IMEIs, MACs, SSIDs and Wi-Fi keys.** Sealed by default; see [Sealed factory state](#sealed-factory-state).
 
 ---
 
 ## Building from Source
 
-The touchscreen daemon is compiled from `src/` — no binaries are committed to this repository.
+The touchscreen daemon is compiled from `src/` — **no binaries are committed to this repository.**
 
-### 1. `build-ipk.sh` — no OpenWrt SDK required
+### 1 — `build-ipk.sh` (no OpenWrt SDK required)
 
 ```sh
 git clone https://github.com/norypt-prv/Norypt-Mudi7.git
@@ -429,17 +510,16 @@ sudo apt install -y gcc-aarch64-linux-gnu   # or have Docker available
 ./build-ipk.sh
 ```
 
-Needs `bash`, `tar`, `gzip`, and an aarch64 cross-compiler (or Docker, used automatically as a fallback). Produces `norypt-ghost_1.0.0-Script-Local.ipk` from the `files/` tree, building `norypt-ghost-touch` first if it is missing or older than its source. **Use for:** day-to-day development and offline builds.
+Needs `bash`, `tar`, `gzip`, and an aarch64 cross-compiler (Docker is used automatically as a fallback). Builds `norypt-ghost-touch` first if missing or stale. **Use for:** day-to-day development and offline builds.
 
-### 2. OpenWrt SDK — `Makefile`
+### 2 — OpenWrt SDK (`Makefile`)
 
-A standard OpenWrt package recipe that compiles the daemon against the exact target toolchain:
+Compiles the daemon against the exact target toolchain:
 
 ```sh
-# Use the 23.05.4 ipq807x/generic SDK — the same OpenWrt release the GL-E5800
-# firmware is based on, and the same aarch64_cortex-a53 musl ABI. (The
-# GL-E5800's IPQ9574 SoC has no upstream stable SDK of its own; any 23.05.4
-# aarch64_cortex-a53 target produces an identical package.)
+# 23.05.4 ipq807x/generic SDK — the same OpenWrt release the GL-E5800 firmware
+# is based on, and the same aarch64_cortex-a53 musl ABI. (The GL-E5800's IPQ9574
+# has no upstream stable SDK; any 23.05.4 aarch64_cortex-a53 target is identical.)
 curl -fLO https://downloads.openwrt.org/releases/23.05.4/targets/ipq807x/generic/openwrt-sdk-23.05.4-ipq807x-generic_gcc-12.3.0_musl.Linux-x86_64.tar.xz
 tar -xJf openwrt-sdk-23.05.4-*.tar.xz && cd openwrt-sdk-23.05.4-*/
 
@@ -448,36 +528,38 @@ make defconfig
 make package/norypt-ghost/compile V=s
 ```
 
-Output: `bin/packages/aarch64_cortex-a53/base/norypt-ghost_1.0.0-1_aarch64_cortex-a53.ipk`. **Use for:** reproducible/auditable builds or opkg feed submission.
+**Use for:** reproducible/auditable builds or opkg feed submission.
 
-### 3. GitHub Actions — both build paths, automatically
-
-Two workflows run on every push, PR, and release tag:
+### 3 — GitHub Actions
 
 | Workflow | What it does | Output |
 |---|---|---|
-| [`build.yml`](.github/workflows/build.yml) | Fast path — installs `gcc-aarch64-linux-gnu` and runs `build-ipk.sh` | `norypt-ghost_<version>-Script-{CI\|Release}.ipk` |
-| [`sdk-build.yml`](.github/workflows/sdk-build.yml) | Downloads the pinned 23.05.4 SDK (checksum-verified) and builds via the `Makefile` | `norypt-ghost_<version>-SDK-{CI\|Release}.ipk` |
+| [`build.yml`](.github/workflows/build.yml) | **Host tests first** (`./tests/run.sh --release`), then the fast script build | `norypt-ghost_<version>-Script-{CI\|Release}.ipk` |
+| [`sdk-build.yml`](.github/workflows/sdk-build.yml) | Downloads the pinned, checksum-verified 23.05.4 SDK and builds via the `Makefile` | `norypt-ghost_<version>-SDK-{CI\|Release}.ipk` |
 
-Both upload their IPK as a workflow artifact (retained 30 days). On a `v*.*.*` tag, a GitHub Release is created with **both** IPKs attached:
+The build job **depends on the test job** — shellcheck, the profile/coherence validator (in release mode, so an unverified TAC fails the build), and the Lua + Python unit suites all gate every artifact. On a `v*.*.*` tag both IPKs are attached to a GitHub Release:
 
 ```sh
 git tag v1.1.0 && git push origin v1.1.0
 ```
 
-The full release procedure — version bumping, tagging rules, and a command reference — is documented in [docs/RELEASING.md](docs/RELEASING.md).
+Full release procedure: [docs/RELEASING.md](docs/RELEASING.md).
 
-### Building the touch daemon on its own
+### Testing locally
 
 ```sh
-./tools/build-touch.sh
+./tests/run.sh              # shellcheck + validator + unit suites
+./tests/run.sh --release    # additionally fails on any unverified TAC
 ```
 
-Uses `aarch64-linux-gnu-gcc` if present, otherwise Docker + QEMU with Alpine/musl. Output is stripped; `build-ipk.sh` refuses to package an unstripped binary.
+### Other tooling
 
-### Development deploy
+```sh
+./tools/build-touch.sh      # build just the touch daemon (native cross-gcc or Docker/Alpine)
+./deploy.sh [host]          # push the working tree to a device over SCP (default root@192.168.8.1)
+```
 
-`./deploy.sh [host]` (default `root@192.168.8.1`) copies the working tree straight onto a device over SCP and re-registers the services — fast iteration without rebuilding the IPK. It does **not** run factory capture; run `norypt-ghost install` manually if needed.
+`deploy.sh` does **not** run factory capture — run `norypt-ghost install` manually if needed.
 
 ---
 
@@ -487,7 +569,11 @@ Uses `aarch64-linux-gnu-gcc` if present, otherwise Docker + QEMU with Alpine/mus
 opkg remove norypt-ghost
 ```
 
-`prerm` stops and disables all services and **restores the full factory identity** (IMEIs, MACs, SSIDs, passwords, hostname); `postrm` re-enables GL-iNet's BSSID randomization and removes runtime state. Factory state in `/etc/config/norypt-ghost` is intentionally left behind so a future reinstall keeps the original values — delete it for a clean slate:
+`prerm` stops and disables all services and restores the full factory identity; `postrm` re-enables GL-iNet's BSSID randomization and clears runtime state.
+
+**On a sealed device**, `prerm` does *not* auto-restore — it prints a warning that the modem keeps its current identity, because restoring needs your passphrase. Run `norypt-ghost restore` over SSH before or after removal.
+
+Factory state is intentionally left behind so a reinstall keeps the original values. For a clean slate:
 
 ```sh
 uci delete norypt-ghost.factory && uci delete norypt-ghost.options && uci commit norypt-ghost
@@ -513,31 +599,23 @@ Hard-won knowledge from bricking-adjacent experiments on the RG650V-NA — none 
 
 ## Project Status
 
-Inherited as device-verified on firmware 4.8.5 by the upstream project: install/uninstall lifecycle, dual-IMEI rotate and restore (live `AT+EGMR` writes confirmed), wireless rotation, volatile MACs, all six splash frames, the LuCI page, the touchscreen daemon, and the health check.
+**Implemented and host-tested.** The full hardening suite — profile catalog, `new-identity`, RAT lock, no-persistent-logs, sealed factory state, TTL normalization, host-key rotation, LuCI controls — is complete, reviewed, and green in CI (shellcheck, profile/coherence validator in release mode, Lua + Python unit suites).
 
-**Not yet re-verified on Norypt hardware.** The rebrand changed every installed path, service name, and UCI namespace; a full install → check → rotate → restore → uninstall pass on a Norypt unit is required before this is called shipped.
-
-**Pending live-SIM validation** (requires an activated SIM):
-
-- [ ] Re-registration after rotate (`+CEREG` 1/5, end-to-end)
-- [ ] Deterministic mode end-to-end (IMSI → IMEI → carrier attach)
-- [ ] Full two-stage sim-swap with a physical SIM change
-- [ ] Throwaway IMEI exposure window check (`logread | grep "sim-swap throwaway"`)
+**On-device acceptance is the remaining gate.** AT writes, IMEI persistence, and the framebuffer cannot be validated off-hardware. Run **[docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)** on a real Mudi 7 before considering this shipped — it also confirms the handful of device facts the code adapts to (exact `AT+QNWPREFCFG` syntax, `openssl`/`qrencode` availability, the real telemetry paths, and the firewall backend).
 
 ---
 
 ## Roadmap
 
-Ranked improvements, with rationale and effort estimates, are tracked in **[docs/ROADMAP.md](docs/ROADMAP.md)**, including a **[Delivered](docs/ROADMAP.md#delivered)** section for what's since shipped (host-tested, not yet on-device verified). The headline items:
+Ranked improvements with rationale and effort estimates live in **[docs/ROADMAP.md](docs/ROADMAP.md)**, including a [Delivered](docs/ROADMAP.md#delivered) section. Currently open:
 
-1. Verify and expand the TAC pool (7 unverified entries today — profile-vendor coherence shipped; verification against a TAC database has not)
-2. ~~Block 2G/3G downgrade~~ — **delivered**, see [RAT lock](#rat-lock-2g3g-downgrade-block)
-3. ~~Rotate the wired WAN/LAN MAC, not just Wi-Fi~~ — **delivered**
-4. Encrypt or discard the cleartext factory-identity state on flash — **sealed mode delivered**, see [Sealed factory state](#sealed-factory-state); rotation-timestamp/export-import sub-items remain
-5. Reconsider the forced locally-administered MAC bit
-6. Key the deterministic IMEI hash with a per-install secret
-7. ~~Single-command "new identity" that rotates every layer at once~~ — **delivered**, see [`new-identity`](#new-identity-full-clean-rotation)
-8. Serving-cell monitoring / IMSI-catcher detection
+- Expand the profile catalog beyond six archetypes, and refresh TACs as new flagships ship
+- Reconsider the forced locally-administered MAC bit for the legacy router path
+- Key the deterministic IMEI hash with a per-install secret
+- Rotation-timestamp hygiene + `export-factory` / `import-factory`
+- Serving-cell monitoring / IMSI-catcher **detection** (the RAT lock is prevention)
+
+Design and implementation records: [docs/HARDENING-DESIGN.md](docs/HARDENING-DESIGN.md) · [docs/HARDENING-PLAN.md](docs/HARDENING-PLAN.md)
 
 ---
 
@@ -550,30 +628,33 @@ Norypt-Mudi7/
 ├── deploy.sh                     dev deploy over SCP
 ├── tools/build-touch.sh          cross-compiles the touch daemon from src/
 ├── src/norypt-ghost-touch.c      touchscreen daemon (C, statically linked)
+├── tests/                        host test suite (run.sh + validator + unit tests)
 ├── screens/
 │   ├── generate.py               RGB565 frame generator (dev-side, Python+Pillow)
-│   └── previews/                 PNG previews of all frames (embedded above)
+│   └── previews/                 PNG previews of all frames
 ├── docs/
+│   ├── ACCEPTANCE.md             on-device acceptance checklist (pre-ship gate)
+│   ├── ROADMAP.md                ranked improvement backlog + delivered log
 │   ├── RELEASING.md              release process
-│   └── ROADMAP.md                ranked improvement backlog
+│   ├── HARDENING-DESIGN.md       design record for the hardening suite
+│   └── HARDENING-PLAN.md         implementation plan
 └── files/                        package payload (mirrors the device filesystem)
     ├── usr/bin/norypt-ghost      CLI entry point (ash)
     ├── usr/libexec/norypt-ghost  rpcd exec backend for LuCI (JSON over fs.exec)
     ├── lib/norypt-ghost/
-    │   ├── functions.sh          AT helpers, IMEI/MAC/SSID generation, RF control,
-    │   │                         RAT lock, splash control — single shared library
-    │   ├── profile.sh            profiles.json loader + region/format-token derivation
+    │   ├── functions.sh          AT helpers, MAC/SSID generation, RF control, RAT lock
+    │   ├── profile.sh            profiles.json loader, selection, format-token derivation
     │   ├── identity.sh           new-identity stage/apply engine, SSH/TLS key regen
-    │   ├── clean.sh               telemetry/log tmpfs + no-persistent-logs guarantee
-    │   ├── seal.sh                factory-state AES-256-CBC seal/unseal wrapper
-    │   ├── imei_generate.lua     TAC-pool IMEI generator (random + deterministic)
+    │   ├── clean.sh              telemetry tmpfs + no-persistent-logs guarantee
+    │   ├── seal.sh               factory-state AES-256-CBC seal/unseal wrapper
+    │   ├── imei_generate.lua     IMEI generator (profile TAC / random / deterministic)
     │   └── luhn.lua              Luhn checksum module
     ├── etc/init.d/               five services: clean (S9), wireless (S10),
     │                             sim-swap stage 2 (S25), ttl (S45), touch (S81)
     ├── usr/share/norypt-ghost/
-    │   ├── tac_pool.json         curated 5G TACs (band-matched to the RG650V-NA)
-    │   ├── oui_pool.json         router + client OUIs with SSID brand mapping
-    │   ├── profiles.json         coherent device-profile catalog (vendor/OUI/TAC/format)
+    │   ├── profiles.json         coherent device-profile catalog (verified TACs)
+    │   ├── tac_pool.json         legacy TAC pool (random mode of the partial path)
+    │   ├── oui_pool.json         router + client OUIs for the partial wireless path
     │   └── screens/*.rgb565      six pre-rendered splash frames
     └── www/…/norypt_ghost.js     LuCI2 admin page (vanilla JS view)
 ```
@@ -582,7 +663,7 @@ Norypt-Mudi7/
 
 ## Attribution
 
-- **[blue-merle-v2](https://github.com/WSchlesner/blue-merle-v2)** — the direct upstream of this package: the Mudi 7 port, the dual-IMEI `AT+EGMR` mapping, the two-stage SIM-swap design, and the LuCI/touchscreen/splash implementation. GPL-2.0-only.
+- **[blue-merle-v2](https://github.com/WSchlesner/blue-merle-v2)** — the direct upstream: the Mudi 7 port, the dual-IMEI `AT+EGMR` mapping, the two-stage SIM-swap design, and the LuCI/touchscreen/splash implementation. GPL-2.0-only.
 - **[SRLabs](https://www.srlabs.de) / [srlabs/blue-merle](https://github.com/srlabs/blue-merle)** — the original design, threat model, and first implementation, for the GL-E750 Mudi. BSD 3-Clause.
 - **[gl-inet/glinet-tac-fix](https://github.com/gl-inet/glinet-tac-fix)** — the only public GL.iNet code calling `AT+EGMR`, which confirmed the quoting format and the `AT+QPRTPARA=1` NV-persistence pattern for the RG650V-NA.
 
@@ -593,3 +674,11 @@ Norypt Ghost is a rebranded and modified derivative, not an official continuatio
 **GPL-2.0-only** — see [LICENSE](LICENSE).
 
 Norypt Ghost inherits GPL-2.0-only from blue-merle-v2. Code derived from SRLabs' BSD-3-Clause blue-merle (`files/lib/norypt-ghost/luhn.lua`) retains SRLabs' copyright, and their full BSD notice is reproduced in [NOTICE](NOTICE) as its terms require. BSD 3-Clause code may be incorporated into a GPL-2.0 work; the combined project is distributed under GPL-2.0-only.
+
+<div align="center">
+
+---
+
+**Norypt Ghost** · Radio-identity rotation for the Mudi 7 · [Report an issue](https://github.com/norypt-prv/Norypt-Mudi7/issues)
+
+</div>
