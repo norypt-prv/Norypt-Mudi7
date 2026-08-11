@@ -7,7 +7,9 @@ BUS=CPU
 SUB=1  # logical subscription for _at() — slot 1 (-U 1); -U 0 alternates and must not be used
 
 # shellcheck source=/dev/null
-. /lib/norypt-ghost/profile.sh
+# Guarded: absent on the host test environment (host tests source this file
+# directly); always present at this path once installed on-device.
+[ -r /lib/norypt-ghost/profile.sh ] && . /lib/norypt-ghost/profile.sh
 
 # ── Messaging ────────────────────────────────────────────────────────────────
 # Writes to syslog and stdout. During boot stdout goes to the system console;
@@ -571,4 +573,47 @@ RANDOMIZE_BT_MAC() {
             || logger -t norypt-ghost "BT MAC set unsupported on this unit"
         hciconfig "$(basename "$hci")" up 2>/dev/null
     done
+}
+
+# Build the exact WIFI: join payload string. Escapes \ ; , : " per the
+# Wi-Fi QR convention. $1 = SSID, $2 = PSK.
+_ng_wifi_payload() {
+    _ng_qr_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/;/\\;/g; s/,/\\,/g; s/:/\\:/g; s/"/\\"/g'; }
+    printf 'WIFI:T:WPA;S:%s;P:%s;;' "$(_ng_qr_esc "$1")" "$(_ng_qr_esc "$2")"
+}
+
+# Best-effort render a Wi-Fi join QR to the framebuffer. Renders only when the
+# device has `qrencode` AND a framebuffer image viewer (fbv/fbi). Otherwise logs
+# and returns 0 — the credentials are always available via the CLI and LuCI, and
+# rotation must never depend on this. Always returns 0.
+_render_join_qr() {
+    local ssid="$1" psk="$2" payload viewer png
+    payload="$(_ng_wifi_payload "$ssid" "$psk")"
+
+    if ! command -v qrencode >/dev/null 2>&1; then
+        logger -t norypt-ghost "join QR: qrencode not installed — SSID/PSK shown via CLI/LuCI only"
+        return 0
+    fi
+    # Pick a framebuffer image viewer if present.
+    viewer=""
+    command -v fbv  >/dev/null 2>&1 && viewer="fbv -d 1 -f"
+    [ -z "$viewer" ] && command -v fbi >/dev/null 2>&1 && viewer="fbi -d /dev/fb0 -T 1 -noverbose -a"
+    if [ -z "$viewer" ]; then
+        logger -t norypt-ghost "join QR: no framebuffer image viewer (fbv/fbi) — SSID/PSK shown via CLI/LuCI only"
+        return 0
+    fi
+
+    png=/tmp/norypt-ghost-join.png
+    # -m 4 quiet zone, sized to fit the 240x320 panel.
+    if qrencode -o "$png" -s 6 -m 4 "$payload" 2>/dev/null; then
+        # Free the framebuffer from gl_screen first (same pattern as _screen_splash).
+        ubus call service delete '{"name":"gl_screen"}' 2>/dev/null
+        /etc/init.d/gl_screen stop >/dev/null 2>&1
+        pkill -9 gl_screen 2>/dev/null
+        $viewer "$png" >/dev/null 2>&1
+        logger -t norypt-ghost "join QR rendered for SSID $ssid"
+    else
+        logger -t norypt-ghost "join QR: qrencode failed — SSID/PSK shown via CLI/LuCI only"
+    fi
+    return 0
 }
