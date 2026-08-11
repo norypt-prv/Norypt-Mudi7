@@ -26,7 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: sudo apt-get update && sudo apt-get install -y shellcheck lua5.1 lua-bitop jsonfilter python3
+      # jsonfilter is an OpenWrt utility and is not packaged for Ubuntu. The
+      # host suite does not need it: the shell functions that call it run only
+      # on the device, and are covered by docs/ACCEPTANCE.md.
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck lua5.1 lua-bitop python3
       # --release enforces the TAC gate: every profiles.json TAC must be
       # verified:true. All catalog TACs are verified against Swappa device
       # records, so this now passes and keeps any future unverified TAC out.
