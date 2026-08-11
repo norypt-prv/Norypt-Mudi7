@@ -47,6 +47,10 @@ install -d "$STAGING/lib/norypt-ghost"
 install -m 0644 "$REPO/files/lib/norypt-ghost/functions.sh"         "$STAGING/lib/norypt-ghost/functions.sh"
 install -m 0644 "$REPO/files/lib/norypt-ghost/imei_generate.lua"    "$STAGING/lib/norypt-ghost/imei_generate.lua"
 install -m 0644 "$REPO/files/lib/norypt-ghost/luhn.lua"             "$STAGING/lib/norypt-ghost/luhn.lua"
+install -m 0644 "$REPO/files/lib/norypt-ghost/profile.sh"           "$STAGING/lib/norypt-ghost/profile.sh"
+install -m 0644 "$REPO/files/lib/norypt-ghost/identity.sh"          "$STAGING/lib/norypt-ghost/identity.sh"
+install -m 0644 "$REPO/files/lib/norypt-ghost/clean.sh"             "$STAGING/lib/norypt-ghost/clean.sh"
+install -m 0644 "$REPO/files/lib/norypt-ghost/seal.sh"              "$STAGING/lib/norypt-ghost/seal.sh"
 
 install -d "$STAGING/usr/bin"
 install -m 0755 "$REPO/files/usr/bin/norypt-ghost"                  "$STAGING/usr/bin/norypt-ghost"
@@ -60,10 +64,12 @@ install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-wireless"      "$STAGING/et
 install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-sim-swap"      "$STAGING/etc/init.d/norypt-ghost-sim-swap"
 install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-clean"         "$STAGING/etc/init.d/norypt-ghost-clean"
 install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-touch"         "$STAGING/etc/init.d/norypt-ghost-touch"
+install -m 0755 "$REPO/files/etc/init.d/norypt-ghost-ttl"           "$STAGING/etc/init.d/norypt-ghost-ttl"
 
 install -d "$STAGING/usr/share/norypt-ghost"
 install -m 0644 "$REPO/files/usr/share/norypt-ghost/tac_pool.json"  "$STAGING/usr/share/norypt-ghost/tac_pool.json"
 install -m 0644 "$REPO/files/usr/share/norypt-ghost/oui_pool.json"  "$STAGING/usr/share/norypt-ghost/oui_pool.json"
+install -m 0644 "$REPO/files/usr/share/norypt-ghost/profiles.json"  "$STAGING/usr/share/norypt-ghost/profiles.json"
 
 install -d "$STAGING/usr/share/norypt-ghost/screens"
 for _f in "$REPO/files/usr/share/norypt-ghost/screens/"*.rgb565; do
@@ -181,6 +187,7 @@ uci -q commit wireless
 /etc/init.d/norypt-ghost-clean enable
 /etc/init.d/norypt-ghost-wireless enable
 /etc/init.d/norypt-ghost-sim-swap enable
+/etc/init.d/norypt-ghost-ttl enable
 
 # Touchscreen trigger: respect a preference saved by a previous install
 # (LuCI toggle persists it to UCI); default to enabled on fresh installs.
@@ -190,6 +197,7 @@ if [ "$(uci -q get norypt-ghost.options.touch_enabled 2>/dev/null)" != "0" ]; th
 fi
 
 /etc/init.d/norypt-ghost-clean start
+/etc/init.d/norypt-ghost-ttl start
 [ -x /etc/init.d/gl_clients ] && /etc/init.d/gl_clients start 2>/dev/null
 
 # Offer to seal the factory identity (IMEIs/MACs/SSIDs/Wi-Fi keys) behind a
@@ -254,11 +262,13 @@ cat > "$CONTROL_DIR/prerm" <<'PRERM'
 /etc/init.d/norypt-ghost-wireless stop 2>/dev/null
 /etc/init.d/norypt-ghost-sim-swap stop 2>/dev/null
 /etc/init.d/norypt-ghost-clean stop 2>/dev/null
+/etc/init.d/norypt-ghost-ttl stop 2>/dev/null
 
 /etc/init.d/norypt-ghost-touch disable 2>/dev/null
 /etc/init.d/norypt-ghost-wireless disable 2>/dev/null
 /etc/init.d/norypt-ghost-sim-swap disable 2>/dev/null
 /etc/init.d/norypt-ghost-clean disable 2>/dev/null
+/etc/init.d/norypt-ghost-ttl disable 2>/dev/null
 
 # Sealed factory state cannot be restored non-interactively (no passphrase
 # available here) — say so loudly instead of silently leaving the device on

@@ -70,8 +70,7 @@ IDENTITY_APPLY_BOOT() {
     _at AT+CFUN=1 >/dev/null 2>&1
     date '+%Y-%m-%d %H:%M (new-identity)' > /tmp/norypt-ghost.last_imei_rotate
     logger -t norypt-ghost "identity applied: profile=$PROFILE_ID"
-    # shellcheck disable=SC1010
-    _screen_splash done
+    _screen_splash "done"
 }
 
 # Regenerate SSH host keys and the LuCI TLS cert — both are permanent device IDs.

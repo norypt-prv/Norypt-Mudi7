@@ -313,7 +313,7 @@ _run_check() {
     echo ""
     echo "Splash frames:"
     local _frame _missing=0
-    for _frame in rotating done simswap restoring error warning; do
+    for _frame in rotating "done" simswap restoring error warning; do
         [ -f "${_SCREENS_DIR}/${_frame}.rgb565" ] || { _fail "frame missing: ${_frame}.rgb565"; _missing=1; }
     done
     [ "$_missing" = "0" ] && _pass "all 6 frames present"
@@ -440,7 +440,7 @@ _rotate() {
         echo "norypt-ghost: cycling modem RF for network re-attach..."
         if MODEM_RESET_FOR_PRIVACY; then
             echo "norypt-ghost: done."
-            _screen_splash done
+            _screen_splash "done"
             sleep 2
         else
             echo "norypt-ghost: done — IMEIs written, but the modem has not re-registered yet." >&2
@@ -793,7 +793,7 @@ EOF
         echo "  Slot 1 IMEI: $(READ_IMEI)"
         echo "  Slot 2 IMEI: $(READ_IMEI_SLOT2)"
         if [ "$_reg_ok" = "1" ]; then
-            _screen_splash done
+            _screen_splash "done"
             sleep 2
         else
             echo "norypt-ghost: warning — modem has not re-registered yet; it keeps retrying in the background." >&2

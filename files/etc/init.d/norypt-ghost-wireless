@@ -14,7 +14,9 @@
 
 . /lib/norypt-ghost/functions.sh   # provides _opt_enabled and the RANDOMIZE_* helpers
 
+# shellcheck disable=SC2034
 START=10
+# shellcheck disable=SC2034
 STOP=99
 
 start() {

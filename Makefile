@@ -45,6 +45,10 @@ define Package/norypt-ghost/install
 	$(INSTALL_DATA) ./files/lib/norypt-ghost/functions.sh        $(1)/lib/norypt-ghost/functions.sh
 	$(INSTALL_DATA) ./files/lib/norypt-ghost/imei_generate.lua   $(1)/lib/norypt-ghost/imei_generate.lua
 	$(INSTALL_DATA) ./files/lib/norypt-ghost/luhn.lua            $(1)/lib/norypt-ghost/luhn.lua
+	$(INSTALL_DATA) ./files/lib/norypt-ghost/profile.sh          $(1)/lib/norypt-ghost/profile.sh
+	$(INSTALL_DATA) ./files/lib/norypt-ghost/identity.sh         $(1)/lib/norypt-ghost/identity.sh
+	$(INSTALL_DATA) ./files/lib/norypt-ghost/clean.sh            $(1)/lib/norypt-ghost/clean.sh
+	$(INSTALL_DATA) ./files/lib/norypt-ghost/seal.sh             $(1)/lib/norypt-ghost/seal.sh
 
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) ./files/usr/bin/norypt-ghost                  $(1)/usr/bin/norypt-ghost
@@ -58,10 +62,12 @@ define Package/norypt-ghost/install
 	$(INSTALL_BIN) ./files/etc/init.d/norypt-ghost-sim-swap      $(1)/etc/init.d/norypt-ghost-sim-swap
 	$(INSTALL_BIN) ./files/etc/init.d/norypt-ghost-clean      $(1)/etc/init.d/norypt-ghost-clean
 	$(INSTALL_BIN) ./files/etc/init.d/norypt-ghost-touch         $(1)/etc/init.d/norypt-ghost-touch
+	$(INSTALL_BIN) ./files/etc/init.d/norypt-ghost-ttl           $(1)/etc/init.d/norypt-ghost-ttl
 
 	$(INSTALL_DIR) $(1)/usr/share/norypt-ghost
 	$(INSTALL_DATA) ./files/usr/share/norypt-ghost/tac_pool.json $(1)/usr/share/norypt-ghost/tac_pool.json
 	$(INSTALL_DATA) ./files/usr/share/norypt-ghost/oui_pool.json $(1)/usr/share/norypt-ghost/oui_pool.json
+	$(INSTALL_DATA) ./files/usr/share/norypt-ghost/profiles.json $(1)/usr/share/norypt-ghost/profiles.json
 
 	$(INSTALL_DIR) $(1)/usr/share/norypt-ghost/screens
 	$(INSTALL_DATA) ./files/usr/share/norypt-ghost/screens/*.rgb565 $(1)/usr/share/norypt-ghost/screens/
@@ -175,6 +181,7 @@ uci -q commit wireless
 /etc/init.d/norypt-ghost-clean enable
 /etc/init.d/norypt-ghost-wireless enable
 /etc/init.d/norypt-ghost-sim-swap enable
+/etc/init.d/norypt-ghost-ttl enable
 
 # Touchscreen trigger: respect a preference saved by a previous install
 # (LuCI toggle persists it to UCI); default to enabled on fresh installs.
@@ -185,6 +192,7 @@ fi
 
 # Start norypt-ghost-clean immediately so the client database moves to RAM.
 /etc/init.d/norypt-ghost-clean start
+/etc/init.d/norypt-ghost-ttl start
 
 # Restart gl_clients against the now-tmpfs-backed database directory.
 [ -x /etc/init.d/gl_clients ] && /etc/init.d/gl_clients start 2>/dev/null
@@ -250,11 +258,13 @@ define Package/norypt-ghost/prerm
 /etc/init.d/norypt-ghost-wireless stop 2>/dev/null
 /etc/init.d/norypt-ghost-sim-swap stop 2>/dev/null
 /etc/init.d/norypt-ghost-clean stop 2>/dev/null
+/etc/init.d/norypt-ghost-ttl stop 2>/dev/null
 
 /etc/init.d/norypt-ghost-touch disable 2>/dev/null
 /etc/init.d/norypt-ghost-wireless disable 2>/dev/null
 /etc/init.d/norypt-ghost-sim-swap disable 2>/dev/null
 /etc/init.d/norypt-ghost-clean disable 2>/dev/null
+/etc/init.d/norypt-ghost-ttl disable 2>/dev/null
 
 # Restore factory IMEIs, MACs, SSIDs, and hostname while the binary still exists.
 # Sealed factory state cannot be restored non-interactively (no passphrase

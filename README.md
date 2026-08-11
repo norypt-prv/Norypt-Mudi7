@@ -5,7 +5,7 @@
 [![License: GPL-2.0](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](#license)
 [![Platform](https://img.shields.io/badge/platform-GL--E5800%20(Mudi%207)-8900ff.svg)](#compatibility)
 
-**Radio-identity rotation for the GL-iNet GL-E5800 (Mudi 7) 5G mobile hotspot** — dual-slot IMEI rotation, MAC/BSSID/SSID/hostname/password randomization, a two-stage SIM-swap flow, and volatile client-MAC storage, controlled from the command line, a LuCI admin page, or the device's touchscreen.
+**Radio-identity rotation for the GL-iNet GL-E5800 (Mudi 7) 5G mobile hotspot** — dual-slot IMEI rotation, MAC/BSSID/SSID/hostname/password randomization, a full-fingerprint `new-identity` rotation, an RAT lock against 2G/3G downgrade, a two-stage SIM-swap flow, sealed factory state, and a no-persistent-connected-device-logs guarantee, controlled from the command line, a LuCI admin page, or the device's touchscreen.
 
 Norypt Ghost is derived from [blue-merle-v2](https://github.com/WSchlesner/blue-merle-v2) (GPL-2.0), itself a ground-up rewrite of [SRLabs' blue-merle](https://github.com/srlabs/blue-merle) for the Mudi 7 — a device with a completely different modem (Quectel RG650V-NA, integrated MHI instead of USB), a rewritten `gl_modem` wrapper, dual SIM + eSIM support, a touchscreen instead of a hardware switch, and a new UCI layout. See [Attribution](#attribution).
 
@@ -30,7 +30,11 @@ Norypt Ghost is derived from [blue-merle-v2](https://github.com/WSchlesner/blue-
   - [IMEI modes](#imei-modes)
   - [SIM-swap flow](#sim-swap-flow)
   - [MAC, BSSID, and SSID randomization](#mac-bssid-and-ssid-randomization)
+  - [`new-identity`: full clean rotation](#new-identity-full-clean-rotation)
+  - [RAT lock (2G/3G downgrade block)](#rat-lock-2g3g-downgrade-block)
   - [Volatile client MACs](#volatile-client-macs)
+  - [No persistent connected-device logs](#no-persistent-connected-device-logs)
+  - [Sealed factory state](#sealed-factory-state)
   - [Splash screens](#splash-screens)
 - [Configuration Reference](#configuration-reference)
 - [Building from Source](#building-from-source)
@@ -53,6 +57,11 @@ Norypt Ghost is derived from [blue-merle-v2](https://github.com/WSchlesner/blue-
 | **Consistent wireless identity** | One router vendor per rotation: all BSSIDs share a single OUI and the SSID broadcasts a matching brand name — no impossible vendor mixes |
 | **Wireless rotation** | BSSIDs/MACs, SSID, hostname, and Wi-Fi passwords randomized on demand or on every boot |
 | **Two-stage SIM swap** | Throwaway IMEIs written before poweroff; final IMEIs written on next boot *before* the modem first attaches — neither real identity bridges the swap |
+| **`new-identity`** | One command, one reboot: coherent profile, every IMEI/MAC/SSID/password, SSH host keys, and the LuCI TLS cert rotated together, with a join QR to reconnect |
+| **RAT lock** | Modem locked to 5G NR/LTE (`AT+QNWPREFCFG`), blocking the 2G/3G downgrade IMSI-catchers rely on |
+| **No persistent connected-device logs** | Syslog, dnsmasq query log/cache, DHCP leases, and every telemetry directory RAM-backed — nothing about a connected client reaches flash |
+| **Sealed factory state** | Factory IMEIs/MACs/SSIDs/keys AES-256-CBC-encrypted behind an install-time passphrase; restore is SSH-only and needs it |
+| **TTL normalization** | Egress TTL/hop-limit set to 64 so NATed client traffic doesn't reveal tethering by TTL decrement |
 | **Volatile client MACs** | `tmpfs` mounted over GL-iNet's client-MAC database — connected-device history never reaches flash |
 | **Network visibility** | Per-slot registration state, operator, and signal in both the CLI and LuCI |
 | **Health check** | `norypt-ghost check` — 16-point read-only self-test of the modem, generator, frames, and services |
@@ -148,6 +157,7 @@ norypt-ghost status            # identity + network registration overview
 norypt-ghost check             # health check (see below)
 norypt-ghost rotate            # rotate both IMEIs, cycle RF, wait for re-attach
 norypt-ghost rotate-wireless   # rotate MACs/SSID/hostname/password immediately
+norypt-ghost new-identity      # full clean rotation: new profile, every identifier, reboot
 norypt-ghost sim-swap          # stage 1 of the SIM-swap flow (powers off!)
 norypt-ghost restore           # restore every factory value
 norypt-ghost install           # (re-)capture factory state — idempotent
@@ -214,11 +224,13 @@ Splash frames:
   PASS  framebuffer present (/dev/fb0)
 
 Services:
-  PASS  norypt-ghost-volatile-macs enabled
+  PASS  norypt-ghost-clean enabled
   PASS  norypt-ghost-wireless enabled
   PASS  norypt-ghost-sim-swap enabled
+  PASS  norypt-ghost-ttl enabled
   PASS  norypt-ghost-touch enabled and running
-  PASS  client-MAC database is RAM-backed (tmpfs mounted)
+  PASS  syslog not persisted to flash
+  PASS  /etc/oui-tertf is RAM-backed
 
 State:
   PASS  factory state saved
@@ -240,7 +252,6 @@ Norypt Ghost reduces the **device-identity** trail a mobile hotspot leaves behin
 - **The eSIM EID is permanent.** The eUICC's EID is a fixed hardware identifier presented during remote SIM provisioning and cannot be rotated.
 - **Location and usage patterns correlate.** Re-appearing in the same place, at the same times, with the same traffic patterns can re-link identities no rotation can hide.
 - **Upstream traffic is out of scope.** Use a VPN/Tor on top; Norypt Ghost handles the radio identity layer only.
-- **Wired MACs are not yet rotated.** Only the Wi-Fi interfaces are covered — see [Roadmap](#roadmap).
 
 The deterministic IMEI mode trades unlinkability for consistency — see [IMEI modes](#imei-modes).
 
@@ -248,10 +259,11 @@ The deterministic IMEI mode trades unlinkability for consistency — see [IMEI m
 
 | Priority | Service | What it does |
 |---|---|---|
-| S9 | `norypt-ghost-volatile-macs` | Mounts `tmpfs` over `/etc/oui-tertf/` before GL-iNet's client tracker starts — the client-MAC database lives in RAM and evaporates at every reboot. |
+| S9 | `norypt-ghost-clean` | Before GL-iNet's client tracker and telemetry daemons start: RAM-backs the syslog, `tmpfs`-mounts every present telemetry directory, and disables dnsmasq query logging/caching — see [No persistent connected-device logs](#no-persistent-connected-device-logs). |
 | S10 | `norypt-ghost-wireless` | If boot rotation is enabled: rotates MACs, SSID, hostname, and Wi-Fi passwords *before* the APs come up. |
 | S23 | `gl_cellular_manager` | GL-iNet's modem init daemon — the first point in boot where the AT socket accepts commands. |
-| S25 | `norypt-ghost-sim-swap` | Only when a sim-swap is pending: waits for the AT socket, disables RF, writes the final IMEIs, re-enables RF. The throwaway IMEI from Stage 1 is replaced before the modem ever attaches. Exits instantly on normal boots. |
+| S25 | `norypt-ghost-sim-swap` | Only when a sim-swap or a staged `new-identity` is pending: waits for the AT socket, disables RF, writes the final IMEIs, applies the RAT lock, re-enables RF. The throwaway IMEI from Stage 1 is replaced before the modem ever attaches. Exits instantly on normal boots. |
+| S45 | `norypt-ghost-ttl` | Normalizes egress TTL/hop-limit to 64 (`nft`, falling back to `iptables`/`ip6tables`) so NATed client traffic looks device-originated — defeats TTL-based tethering detection. |
 | S80 | `gl_screen` | GL-iNet's touchscreen UI daemon. |
 | S81 | `norypt-ghost-touch` | The long-press trigger daemon (procd-managed, auto-respawns). |
 
@@ -298,11 +310,59 @@ Every rotation picks **one router identity** — a single vendor OUI plus its SS
 
 GL-iNet's own `random_bssid` feature is disabled at install (it generates UA MACs on its own schedule) and re-enabled at uninstall. Hostname becomes `router-XXXX`; main and guest networks get independent random 12-hex-character passwords.
 
+### `new-identity`: full clean rotation
+
+`rotate` and `rotate-wireless` are documented as *partial, live* operations — each changes one layer while the device keeps running, which is useful for quick refreshes but leaves the other layer as a linking handle across the boundary. `norypt-ghost new-identity` closes that gap: it is the single command that changes **everything at once**, across a clean reboot, and it's the recommended action whenever you want a real break between sessions.
+
+One run does all of the following:
+
+1. Picks a whole coherent device profile from `usr/share/norypt-ghost/profiles.json` (vendor, wifi/client OUI, SSID/hostname/password format, region, and a matching TAC) — not independent random fields, so the result can't show a NETGEAR SSID over an Apple OUI.
+2. Stages new BSSIDs/MACs (including the wired MAC), SSID, hostname, and Wi-Fi passwords into UCI immediately.
+3. Regenerates the SSH host keys and the LuCI TLS cert — both are permanent device identifiers that survive `rotate`/`rotate-wireless` untouched.
+4. Stages the new IMEIs for both slots.
+5. Prints (and, if `qrencode` plus a framebuffer viewer are installed, renders on the device screen) a `WIFI:` join QR and the plain SSID/password, so you can rejoin the new network immediately after reboot.
+6. Reboots. The IMEIs are written *before* the modem's first attach on the next boot (the same S25 ordering the SIM-swap flow relies on), so the old identity never bridges the change.
+
+```
+norypt-ghost: staging new device identity...
+  Profile: netgear-nighthawk-m6-na
+  SSID:    NETGEAR-A3F1
+norypt-ghost: rebooting in 5s to apply the new identity cleanly.
+  Scan the QR on the device screen to rejoin Wi-Fi.
+```
+
+### RAT lock (2G/3G downgrade block)
+
+The classic IMSI-catcher technique is a **downgrade**: force the handset onto 2G, where mutual authentication is absent and encryption is weak or off. Every identity apply (boot, `new-identity`, sim-swap Stage 2) now issues `AT+QNWPREFCFG="mode_pref",NR5G:LTE` — locking the modem to 5G NR / LTE only, so it can no longer silently fall back to GSM.
+
+Controlled by `norypt-ghost.options.rat_lock` (default **on**). Turn it off from LuCI or `uci set norypt-ghost.options.rat_lock=0 && uci commit norypt-ghost` for regions with no LTE coverage.
+
 ### Volatile client MACs
 
 GL-iNet's `gl_clients` daemon keeps a persistent database of every client MAC that ever connected, at `/etc/oui-tertf/client.db` on flash. At S9 Norypt Ghost deletes the on-flash copy and mounts a `tmpfs` over the directory — the daemon keeps writing without knowing it's writing to RAM, and the history starts empty every boot.
 
 (The old file is unlinked, not overwritten: the Mudi 7's overlay is ext4 on eMMC, whose flash translation layer remaps writes — overwrite-in-place tools like `shred` are ineffective there. The tmpfs mount is the real protection.)
+
+### No persistent connected-device logs
+
+The volatile-MAC protection above was broadened into a general **no-connected-device-logs guarantee**, applied by the `norypt-ghost-clean` service before any of GL-iNet's tracking daemons start:
+
+- **System log stays in RAM.** Any flash `log_file` configured under `system.@system[0]` is unset — `logread` still works, but nothing is written to flash.
+- **`tmpfs` mounted over every telemetry directory present**, not just the client-MAC database: `/etc/oui-tertf` (client tracker), `/var/lib/nlbwmon` (bandwidth monitor), `/etc/vnstat` and `/var/lib/vnstat` (traffic stats). Each daemon keeps writing, believing it's on flash; the data evaporates at every reboot.
+- **dnsmasq** runs with `logqueries=0` and `cachelocal=0` — no per-client DNS query log, no persisted local cache.
+- **DHCP leases forced to `/tmp`** if GL-iNet's build ever points `leasefile` at flash.
+
+`norypt-ghost check` reports pass/fail for each of these independently, and `norypt-ghost-clean stop` (run automatically on package removal) clears the RAM copies before the service exits — nothing about a connected device's history is ever written to durable storage on a Norypt Ghost install.
+
+### Sealed factory state
+
+The `factory` UCI section is what makes `restore` and clean uninstalls possible — but it's also a complete recovery key for the real identity the tool exists to hide, and by default it lived in cleartext, forever. **Sealed factory state** closes that: when `openssl` is available (the default, `factory_mode=sealed`), the entire `factory` section is AES-256-CBC-encrypted (PBKDF2, 200k iterations) behind a passphrase you set at install time, and the plaintext is discarded immediately after sealing.
+
+What that means in practice:
+
+- **Restore is SSH-only.** A sealed restore needs a human to type the passphrase at a terminal. Non-interactive callers — `opkg remove`'s `prerm`, a backgrounded LuCI restore click — refuse outright with a clear message instead of silently leaving the device half-restored or prompting into nowhere. Run `norypt-ghost restore` from an interactive SSH session when you need the factory identity back.
+- **Forgetting the passphrase means no restore, period.** There is no recovery mechanism and no backdoor — that's the point. Wrong passphrase or a corrupted blob aborts the restore with RF left untouched, rather than writing garbage IMEIs.
+- **Falls back to plain automatically** when `openssl` isn't installed, or when `factory_mode=plain` is explicitly set — behavior (and risk) then match the original cleartext design exactly, with no silent capability loss.
 
 ### Splash screens
 
@@ -345,11 +405,14 @@ config norypt-ghost 'options'
     option static_imei_slot2    ''
     option register_timeout     '120'      # seconds to wait for re-attach (10-600)
     option touch_enabled        '1'        # touchscreen trigger preference
+    option rat_lock             '1'        # lock modem to 5G NR/LTE; blocks 2G/3G downgrade
+    option factory_mode         'sealed'   # sealed | plain — see Sealed factory state
+    option default_region       'NA'       # NA | EU — profile region when no SIM/MCC is readable
 ```
 
 All values are editable from the LuCI page (changes apply instantly) or via `uci set norypt-ghost.options.<name>=<value> && uci commit norypt-ghost`. Every value is validated server-side — malformed input is rejected, never written to the modem.
 
-> **The `factory` section stores your device's real IMEIs, MACs, SSIDs and Wi-Fi keys in cleartext on flash.** That is what makes `restore` and clean uninstalls possible, but it also means anyone with the device recovers its true identity. Encrypting or discarding this state is on the [Roadmap](#roadmap).
+> **The `factory` section stores your device's real IMEIs, MACs, SSIDs and Wi-Fi keys.** By default (`factory_mode=sealed`, requires `openssl`) it is encrypted behind a passphrase you set at install — see [Sealed factory state](#sealed-factory-state). With `factory_mode=plain`, or when `openssl` isn't installed, it falls back to the original cleartext-on-flash behavior: that's what makes `restore` and clean uninstalls possible, but it also means anyone with the device recovers its true identity.
 
 ---
 
@@ -465,15 +528,15 @@ Inherited as device-verified on firmware 4.8.5 by the upstream project: install/
 
 ## Roadmap
 
-Ranked improvements, with rationale and effort estimates, are tracked in **[docs/ROADMAP.md](docs/ROADMAP.md)**. The headline items:
+Ranked improvements, with rationale and effort estimates, are tracked in **[docs/ROADMAP.md](docs/ROADMAP.md)**, including a **[Delivered](docs/ROADMAP.md#delivered)** section for what's since shipped (host-tested, not yet on-device verified). The headline items:
 
-1. Verify and expand the TAC pool (7 unverified entries today)
-2. Block 2G/3G downgrade — the standard IMSI-catcher entry path
-3. Rotate the wired WAN/LAN MAC, not just Wi-Fi
-4. Encrypt or discard the cleartext factory-identity state on flash
+1. Verify and expand the TAC pool (7 unverified entries today — profile-vendor coherence shipped; verification against a TAC database has not)
+2. ~~Block 2G/3G downgrade~~ — **delivered**, see [RAT lock](#rat-lock-2g3g-downgrade-block)
+3. ~~Rotate the wired WAN/LAN MAC, not just Wi-Fi~~ — **delivered**
+4. Encrypt or discard the cleartext factory-identity state on flash — **sealed mode delivered**, see [Sealed factory state](#sealed-factory-state); rotation-timestamp/export-import sub-items remain
 5. Reconsider the forced locally-administered MAC bit
 6. Key the deterministic IMEI hash with a per-install secret
-7. Single-command "new identity" that rotates every layer at once
+7. ~~Single-command "new identity" that rotates every layer at once~~ — **delivered**, see [`new-identity`](#new-identity-full-clean-rotation)
 8. Serving-cell monitoring / IMSI-catcher detection
 
 ---
@@ -498,14 +561,19 @@ Norypt-Mudi7/
     ├── usr/libexec/norypt-ghost  rpcd exec backend for LuCI (JSON over fs.exec)
     ├── lib/norypt-ghost/
     │   ├── functions.sh          AT helpers, IMEI/MAC/SSID generation, RF control,
-    │   │                         splash control — single shared library
+    │   │                         RAT lock, splash control — single shared library
+    │   ├── profile.sh            profiles.json loader + region/format-token derivation
+    │   ├── identity.sh           new-identity stage/apply engine, SSH/TLS key regen
+    │   ├── clean.sh               telemetry/log tmpfs + no-persistent-logs guarantee
+    │   ├── seal.sh                factory-state AES-256-CBC seal/unseal wrapper
     │   ├── imei_generate.lua     TAC-pool IMEI generator (random + deterministic)
     │   └── luhn.lua              Luhn checksum module
-    ├── etc/init.d/               four services: volatile-macs (S9), wireless (S10),
-    │                             sim-swap stage 2 (S25), touch (S81)
+    ├── etc/init.d/               five services: clean (S9), wireless (S10),
+    │                             sim-swap stage 2 (S25), ttl (S45), touch (S81)
     ├── usr/share/norypt-ghost/
     │   ├── tac_pool.json         curated 5G TACs (band-matched to the RG650V-NA)
     │   ├── oui_pool.json         router + client OUIs with SSID brand mapping
+    │   ├── profiles.json         coherent device-profile catalog (vendor/OUI/TAC/format)
     │   └── screens/*.rgb565      six pre-rendered splash frames
     └── www/…/norypt_ghost.js     LuCI2 admin page (vanilla JS view)
 ```
