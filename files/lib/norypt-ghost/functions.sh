@@ -331,6 +331,29 @@ READ_SIGNAL() {
     esac
 }
 
+# Active SIM MCC (first 3 IMSI digits), empty if unreadable.
+READ_MCC() {
+    local imsi
+    imsi="$(READ_IMSI_SLOT1 2>/dev/null)"
+    [ -n "$imsi" ] || imsi="$(READ_IMSI_SLOT2 2>/dev/null)"
+    printf '%s' "$imsi" | cut -c1-3
+}
+
+# Lock the modem to 5G-NR + LTE (block 2G/3G downgrade). Controlled by
+# norypt-ghost.options.rat_lock (default on). Syntax confirmed on-device
+# against the RG650V before relied upon; logs and returns non-zero on failure.
+RAT_LOCK_APPLY() {
+    _opt_enabled rat_lock || { logger -t norypt-ghost "rat_lock disabled by option"; return 0; }
+    local out
+    out="$(_at 'AT+QNWPREFCFG="mode_pref",NR5G:LTE' 2>&1)"
+    if echo "$out" | grep -q "OK"; then
+        logger -t norypt-ghost "RAT locked to NR5G:LTE"
+        return 0
+    fi
+    logger -t norypt-ghost "RAT lock FAILED: $out"
+    return 1
+}
+
 # ── MAC generation ───────────────────────────────────────────────────────────
 # Generates a locally-administered (LA) MAC styled after a real OUI prefix.
 # LA bit (0x02) is forced on the first octet so the Qualcomm ath11k driver
