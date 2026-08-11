@@ -1,0 +1,42 @@
+# --- Development-only files (NOT part of the project) ---
+# Research docs, reference material, screenshots, and artifacts captured
+# during development. Not redistributed via GitHub.
+development-files/
+
+# screens/previews/ is committed — the PNGs are embedded in the README.
+
+# --- Editor & OS junk ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# --- Build output ---
+# Cross-compiled touch daemon — built from src/ by tools/build-touch.sh,
+# never committed (a checked-in blob silently drifts from the source).
+files/usr/bin/norypt-ghost-touch
+# OpenWrt SDK build artifacts
+ipkg-*/
+*.ipk
+# build-ipk.sh staging directory
+build/
+
+# --- Secrets ---
+*.key
+*.pem
+.env
+.env.local
+authorized_keys
+
+# --- Python cache (from screens/generate.py) ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- Local-only output / scratch ---
+*.log
+scratch/
+tmp/

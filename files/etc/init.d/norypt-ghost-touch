@@ -1,0 +1,19 @@
+#!/bin/sh /etc/rc.common
+# Norypt Ghost — touchscreen long-press trigger daemon
+#
+# Runs at START=81, right after gl_screen (S80). norypt-ghost-touch reads
+# /dev/input/event0 non-exclusively (gl_screen keeps working) and forks
+# `norypt-ghost sim-swap` on a 2-second hold of the clock area (X:0-80, Y:0-30).
+# Toggled via the LuCI page or: /etc/init.d/norypt-ghost-touch disable && stop
+
+START=81
+STOP=20
+USE_PROCD=1
+
+start_service() {
+    procd_open_instance
+    procd_set_param command /usr/bin/norypt-ghost-touch
+    procd_set_param respawn 30 5 0
+    procd_set_param stderr 1
+    procd_close_instance
+}

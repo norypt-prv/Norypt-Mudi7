@@ -1,0 +1,47 @@
+#!/bin/sh /etc/rc.common
+# Norypt Ghost — keep connected-client MAC database in RAM only.
+#
+# gl_clients (START=99) records client MACs to /etc/oui-tertf/client.db on flash.
+# We mount a tmpfs over /etc/oui-tertf/ before gl_clients starts so that all
+# writes go to RAM and the database never persists across reboots.
+#
+# The tmpfs mount IS the protection: it stops client-MAC history from ever
+# reaching flash. The pre-existing on-flash copy is unlinked here, but cannot
+# be physically erased from userspace — the Mudi 7's overlay is ext4 on eMMC,
+# whose flash-translation-layer remaps overwrites to fresh cells, so shred/dd
+# overwrite-in-place is ineffective (and an unbounded `dd if=/dev/zero` would
+# fill the overlay to ENOSPC at boot). We therefore just remove the file.
+#
+# Must run before gl-tertf (START=60) and gl_clients (START=99).
+
+START=9
+STOP=99
+
+DB_DIR="/etc/oui-tertf"
+DB_FILE="${DB_DIR}/client.db"
+
+_wipe() {
+    local f="$1"
+    [ -f "$f" ] || return 0
+    # Plain unlink — overwrite-in-place buys nothing on an eMMC FTL (see header).
+    rm -f "$f"
+}
+
+start() {
+    [ -d "$DB_DIR" ] || return 0
+
+    # Already mounted — handles service restart without double-mount.
+    if mount | grep -q "tmpfs on ${DB_DIR} "; then
+        return 0
+    fi
+
+    # Wipe the flash copy so historical client MACs can't be recovered,
+    # then mount tmpfs so all future writes go to RAM only.
+    _wipe "$DB_FILE"
+    mount -t tmpfs tmpfs "$DB_DIR"
+}
+
+stop() {
+    # Wipe the RAM-backed db on shutdown so gl_clients sync has nothing to commit
+    _wipe "$DB_FILE"
+}

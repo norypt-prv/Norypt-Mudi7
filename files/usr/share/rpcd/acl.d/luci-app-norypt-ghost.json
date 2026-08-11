@@ -1,0 +1,17 @@
+{
+    "luci-app-norypt-ghost": {
+        "description": "Norypt Ghost privacy identity management",
+        "read": {
+            "file": {
+                "/usr/libexec/norypt-ghost": ["exec"],
+                "/usr/libexec/norypt-ghost *": ["exec"]
+            }
+        },
+        "write": {
+            "file": {
+                "/usr/libexec/norypt-ghost": ["exec"],
+                "/usr/libexec/norypt-ghost *": ["exec"]
+            }
+        }
+    }
+}

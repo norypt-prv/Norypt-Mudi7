@@ -1,0 +1,31 @@
+#!/bin/sh /etc/rc.common
+# Norypt Ghost — boot-time wireless identity randomization
+#
+# Runs at START=10, before repeater (15) and network (20), so MACs/SSIDs/passwords
+# are applied before the wireless subsystem brings interfaces up.
+# Modem operations (sim-swap Stage 2) are handled by norypt-ghost-sim-swap at START=25.
+#
+# Each feature can be toggled via /etc/config/norypt-ghost options section:
+#   uci set norypt-ghost.options.randomize_mac=0      # disable MAC rotation
+#   uci set norypt-ghost.options.randomize_ssid=0     # disable SSID rotation
+#   uci set norypt-ghost.options.randomize_hostname=0 # disable hostname rotation
+#   uci set norypt-ghost.options.randomize_password=0 # disable password rotation
+#   uci commit norypt-ghost
+
+. /lib/norypt-ghost/functions.sh   # provides _opt_enabled and the RANDOMIZE_* helpers
+
+START=10
+STOP=99
+
+start() {
+    _opt_enabled randomize_on_boot || return 0
+    _opt_enabled randomize_mac      && RANDOMIZE_MACADDR
+    _opt_enabled randomize_ssid     && RANDOMIZE_SSID
+    _opt_enabled randomize_hostname && RANDOMIZE_HOSTNAME
+    _opt_enabled randomize_password && RANDOMIZE_PASSWORD
+    date '+%Y-%m-%d %H:%M (boot)' > /etc/norypt-ghost.last_wireless_rotate
+}
+
+stop() {
+    echo "norypt-ghost: wireless randomization service stopped"
+}

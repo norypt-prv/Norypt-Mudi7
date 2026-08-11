@@ -1,0 +1,13 @@
+{
+    "admin/services/norypt_ghost": {
+        "title": "Norypt Ghost",
+        "order": 90,
+        "action": {
+            "type": "view",
+            "path": "norypt_ghost"
+        },
+        "depends": {
+            "acl": ["luci-app-norypt-ghost"]
+        }
+    }
+}
