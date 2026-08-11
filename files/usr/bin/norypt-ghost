@@ -306,7 +306,7 @@ _run_check() {
     fi
     # shellcheck source=/dev/null
     . /lib/norypt-ghost/clean.sh
-    CLEAN_STATUS
+    CLEAN_STATUS || _CHECK_FAILS=$((_CHECK_FAILS + 1))
 
     echo ""
     echo "State:"

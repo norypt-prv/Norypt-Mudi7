@@ -40,13 +40,23 @@ CLEAN_WIPE() {
 }
 
 CLEAN_STATUS() {
-    [ -z "$(uci -q get system.@system[0].log_file 2>/dev/null)" ] \
-        && echo "  PASS  syslog not persisted to flash" \
-        || echo "  FAIL  syslog log_file set — logs hitting flash"
+    local _ng_status_fail=0
+    if [ -z "$(uci -q get system.@system[0].log_file 2>/dev/null)" ]; then
+        echo "  PASS  syslog not persisted to flash"
+    else
+        echo "  FAIL  syslog log_file set — logs hitting flash"
+        _ng_status_fail=1
+    fi
     local d
     # shellcheck disable=SC2086
     for d in $_CLEAN_DIRS; do
         [ -d "$d" ] || continue
-        _is_tmpfs "$d" && echo "  PASS  $d is RAM-backed" || echo "  FAIL  $d on flash"
+        if _is_tmpfs "$d"; then
+            echo "  PASS  $d is RAM-backed"
+        else
+            echo "  FAIL  $d on flash"
+            _ng_status_fail=1
+        fi
     done
+    return "$_ng_status_fail"
 }
