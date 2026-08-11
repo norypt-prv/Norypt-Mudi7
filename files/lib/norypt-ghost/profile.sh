@@ -44,6 +44,7 @@ _expand_format() {
         tok="${rest#*\{}"; tok="${tok%%\}*}"     # e.g. 4hex
         rest="${rest#*\}}"                        # remainder after }
         n="$(printf '%s' "$tok" | tr -dc '0-9')"
+        # shellcheck disable=SC2018
         kind="$(printf '%s' "$tok" | tr -dc 'a-z')"
         out="${out}$(_rand_chars "$n" "$kind")"
     done
