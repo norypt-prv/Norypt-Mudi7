@@ -114,6 +114,18 @@ return view.extend({
             });
         }
 
+        function handleNewIdentity() {
+            if (!window.confirm('Start New Identity — full rotation?\n\nThis regenerates IMEIs, wireless/system identity (MACs, SSID, hostname, password), and RAT/region posture in one pass, then REBOOTS the device. This is the clean break; the partial rotate actions further down do not by themselves guarantee it.'))
+                return;
+            if (!window.confirm('Confirm again: the device will reboot when this finishes.\n\nDo not power the device off manually while it runs.'))
+                return;
+            exec('new_identity').then(function() {
+                showNotice('New Identity started — full rotation in progress, the device will reboot shortly. Reload this page once it comes back up.', false);
+            }).catch(function(e) {
+                showNotice('Error: ' + e.message, true);
+            });
+        }
+
         // ── Table helpers ─────────────────────────────────────────────────────
 
         function tableHead() {
@@ -177,6 +189,7 @@ return view.extend({
         var wirelessSavedEl = E('span', { 'style': 'font-size:.82em;color:#1a7f3c;font-weight:normal' }, []);
         var imeiSavedEl     = E('span', { 'style': 'font-size:.82em;color:#1a7f3c;font-weight:normal' }, []);
         var touchSavedEl    = E('span', { 'style': 'font-size:.82em;color:#1a7f3c;font-weight:normal' }, []);
+        var securitySavedEl = E('span', { 'style': 'font-size:.82em;color:#1a7f3c;font-weight:normal' }, []);
         function flashSaved(el) {
             el.textContent = 'Saved ✓';
             setTimeout(function() { el.textContent = ''; }, 1500);
@@ -239,6 +252,7 @@ return view.extend({
 
         var mode1 = st.imei_mode_slot1 || 'random';
         var mode2 = st.imei_mode_slot2 || 'random';
+        var sealed = st.factory_sealed === '1';
 
         // ── Static IMEI inputs ────────────────────────────────────────────────
 
@@ -331,6 +345,20 @@ return view.extend({
                 E('code', {}, [ 'norypt-ghost install' ]),
                 ' over SSH before using this page.'
             ]) : E('span'),
+
+            // ── New Identity (lead action) ───────────────────────────────────
+            section('New Identity', [
+                E('div', { 'style': 'color:var(--text-color-medium);font-size:.9em;margin-bottom:10px;line-height:1.5' }, [
+                    'Full rotation — regenerates IMEIs, wireless/system identity, and RAT/region posture in one pass, then reboots the device. This is the clean break; the partial rotate actions under ',
+                    E('em', {}, [ 'Actions' ]),
+                    ' below do not by themselves guarantee it.'
+                ]),
+                E('button', {
+                    'class': 'btn cbi-button-apply important',
+                    'style': 'font-size:1.05em;padding:9px 20px;font-weight:600',
+                    'click': handleNewIdentity
+                }, [ 'New Identity (full rotation — reboots)' ])
+            ]),
 
             // ── IMEI ──────────────────────────────────────────────────────────
             section('IMEI', [
@@ -456,19 +484,75 @@ return view.extend({
                 ])
             ]),
 
+            // ── Security / Region ────────────────────────────────────────────
+            section('Security / Region', [
+                E('div', { 'style': 'font-size:.85em;font-weight:600;color:var(--text-color-high);border-bottom:1px solid var(--border-color-high);padding-bottom:3px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between' }, [ 'Radio Access Technology', securitySavedEl ]),
+                E('div', { 'style': 'margin-bottom:4px' }, [
+                    checkbox('Block 2G/3G downgrade (5G/LTE only)', 'rat_lock', st.rat_lock !== '0', securitySavedEl)
+                ]),
+                E('div', { 'style': 'color:var(--text-color-medium);font-size:.82em;margin-bottom:14px;padding-left:1.5em' }, [
+                    'Prevents the modem from silently falling back to 2G/3G — a common IMSI-catcher downgrade vector.'
+                ]),
+
+                E('div', { 'style': 'font-size:.85em;font-weight:600;color:var(--text-color-high);border-bottom:1px solid var(--border-color-high);padding-bottom:3px;margin-bottom:8px' }, [ 'Default Region' ]),
+                E('div', { 'style': 'display:flex;align-items:center;margin-bottom:14px' }, [
+                    (function() {
+                        var sel = E('select', {
+                            'style': 'padding:3px 5px;border:1px solid #ccc;border-radius:3px',
+                            'change': function() {
+                                fs.exec(cmd, [ 'set:default_region=' + sel.value ])
+                                    .then(function() { flashSaved(securitySavedEl); })
+                                    .catch(function(e) { console.error('set option failed:', e.message); });
+                            }
+                        }, [
+                            E('option', { 'value': 'EU' }, [ 'EU' ]),
+                            E('option', { 'value': 'NA' }, [ 'NA' ])
+                        ]);
+                        sel.value = (st.default_region === 'EU') ? 'EU' : 'NA';
+                        return sel;
+                    })(),
+                    E('span', { 'style': 'color:var(--text-color-medium);font-size:.82em;margin-left:8px' }, [
+                        'Regional preset used when deriving profile-based identity values.'
+                    ])
+                ]),
+
+                E('div', { 'style': 'font-size:.85em;font-weight:600;color:var(--text-color-high);border-bottom:1px solid var(--border-color-high);padding-bottom:3px;margin-bottom:8px' }, [ 'Factory-Seal Mode' ]),
+                sealed ? E('div', { 'style': 'margin-bottom:4px' }, [
+                    E('span', { 'style': 'font-weight:bold;color:#1a7f3c' }, [ 'Sealed' ]),
+                    E('span', { 'style': 'color:var(--text-color-medium);font-size:.85em;margin-left:8px' },
+                        [ '— original identity is passphrase-encrypted and already set. Not changeable from LuCI; unseal with ' ]),
+                    E('code', {}, [ 'norypt-ghost restore' ]),
+                    E('span', { 'style': 'color:var(--text-color-medium);font-size:.85em' }, [ ' over SSH.' ])
+                ]) : (function() {
+                    var rSealed = E('input', { 'type': 'radio', 'name': 'factory_mode_radio', 'value': 'sealed', 'style': 'margin-right:4px' });
+                    var rPlain  = E('input', { 'type': 'radio', 'name': 'factory_mode_radio', 'value': 'plain',  'style': 'margin-right:4px' });
+                    rSealed.checked = st.factory_mode !== 'plain';
+                    rPlain.checked  = st.factory_mode === 'plain';
+                    function saveFactoryMode(val) {
+                        fs.exec(cmd, [ 'set:factory_mode=' + val ])
+                            .then(function() { flashSaved(securitySavedEl); })
+                            .catch(function(e) { console.error('set option failed:', e.message); });
+                    }
+                    rSealed.addEventListener('change', function() { if (rSealed.checked) saveFactoryMode('sealed'); });
+                    rPlain.addEventListener('change', function() { if (rPlain.checked) saveFactoryMode('plain'); });
+                    return E('div', { 'style': 'display:flex;align-items:center;gap:16px' }, [
+                        E('label', { 'style': 'display:inline-flex;align-items:center;cursor:pointer' }, [ rSealed, 'Sealed' ]),
+                        E('label', { 'style': 'display:inline-flex;align-items:center;cursor:pointer' }, [ rPlain, 'Plain' ])
+                    ]);
+                })()
+            ]),
+
             // ── Actions ───────────────────────────────────────────────────────
             section('Actions', [
+                E('div', { 'style': 'font-size:.78em;font-weight:600;color:var(--text-color-medium);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px' },
+                    [ 'Advanced — partial, not a clean break' ]),
                 E('dl', { 'style': 'margin:0 0 .75em;color:var(--text-color-medium);font-size:.9em;display:grid;grid-template-columns:auto 1fr;gap:2px 8px' }, [
                     E('dt', { 'style': 'font-weight:600;white-space:nowrap;color:var(--text-color-high)' }, [ 'Rotate IMEIs' ]),
                     E('dd', { 'style': 'margin:0' }, [ '— writes new IMEIs using the selected mode and cycles modem RF for re-registration.' ]),
                     E('dt', { 'style': 'font-weight:600;white-space:nowrap;color:var(--text-color-high)' }, [ 'Rotate Wireless/System' ]),
-                    E('dd', { 'style': 'margin:0' }, [ '— immediately applies new MACs, SSIDs, hostname, and password per the checked options.' ]),
-                    E('dt', { 'style': 'font-weight:600;white-space:nowrap;color:var(--text-color-high)' }, [ 'SIM Swap' ]),
-                    E('dd', { 'style': 'margin:0' }, [ '— writes throwaway IMEIs and powers the device off; swap SIM(s) while off, final IMEIs are written on next boot.' ]),
-                    E('dt', { 'style': 'font-weight:600;white-space:nowrap;color:var(--text-color-high)' }, [ 'Restore Factory' ]),
-                    E('dd', { 'style': 'margin:0' }, [ '— returns all identity values to factory state.' ])
+                    E('dd', { 'style': 'margin:0' }, [ '— immediately applies new MACs, SSIDs, hostname, and password per the checked options.' ])
                 ]),
-                E('div', {}, [
+                E('div', { 'style': 'margin-bottom:14px' }, [
                     E('button', {
                         'class': 'btn cbi-button-apply', 'style': 'margin-right:8px',
                         'click': handleRotateImeis
@@ -476,16 +560,32 @@ return view.extend({
                     E('button', {
                         'class': 'btn cbi-button-apply', 'style': 'margin-right:8px',
                         'click': handleRotateWireless
-                    }, [ 'Rotate Wireless/System' ]),
+                    }, [ 'Rotate Wireless/System' ])
+                ]),
+                E('dl', { 'style': 'margin:0 0 .75em;color:var(--text-color-medium);font-size:.9em;display:grid;grid-template-columns:auto 1fr;gap:2px 8px' }, [
+                    E('dt', { 'style': 'font-weight:600;white-space:nowrap;color:var(--text-color-high)' }, [ 'SIM Swap' ]),
+                    E('dd', { 'style': 'margin:0' }, [ '— writes throwaway IMEIs and powers the device off; swap SIM(s) while off, final IMEIs are written on next boot.' ]),
+                    E('dt', { 'style': 'font-weight:600;white-space:nowrap;color:var(--text-color-high)' }, [ 'Restore Factory' ]),
+                    E('dd', { 'style': 'margin:0' }, [ '— returns all identity values to factory state.' ])
+                ]),
+                E('div', {}, [
                     E('button', {
                         'class': 'btn cbi-button-remove', 'style': 'margin-right:8px',
                         'click': handleSimSwap
                     }, [ 'SIM Swap (powers off)' ]),
-                    E('button', {
+                    sealed ? E('button', {
+                        'class': 'btn cbi-button-reset', 'disabled': 'disabled',
+                        'title': 'Sealed device — run "norypt-ghost restore" over SSH to restore the original identity.'
+                    }, [ 'Restore Factory' ]) : E('button', {
                         'class': 'btn cbi-button-reset',
                         'click': handleRestore
                     }, [ 'Restore Factory' ])
                 ]),
+                sealed ? E('div', { 'style': 'color:var(--text-color-medium);font-size:.82em;margin-top:6px' }, [
+                    'Sealed device — run ',
+                    E('code', {}, [ 'norypt-ghost restore' ]),
+                    ' over SSH to restore the original identity.'
+                ]) : E('span'),
                 E('div', {
                     'style': 'color:var(--text-color-medium);font-size:.9em;margin-top:.6em;line-height:1.7'
                 }, [
