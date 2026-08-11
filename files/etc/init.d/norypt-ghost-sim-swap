@@ -43,6 +43,16 @@ _wait_for_at() {
 }
 
 start() {
+    # Full-identity rotation (new-identity) completes here too, before attach.
+    if [ -f /etc/norypt-ghost.identity-pending ]; then
+        # shellcheck source=/dev/null
+        . /lib/norypt-ghost/identity.sh
+        _screen_splash rotating
+        _wait_for_at || { _screen_splash error; return 1; }
+        IDENTITY_APPLY_BOOT
+        return 0
+    fi
+
     [ -f /etc/norypt-ghost.sim-swap-pending ] || return 0
 
     _screen_splash rotating

@@ -19,6 +19,8 @@
 #   --static              shorthand: both slots static
 
 . /lib/norypt-ghost/functions.sh
+# shellcheck source=/dev/null
+. /lib/norypt-ghost/identity.sh
 
 FACTORY_CFG=/etc/config/norypt-ghost
 
@@ -422,8 +424,9 @@ Commands:
   install          Capture factory state (run once before first rotation)
   status           Show per-slot IMEI/IMSI/ICCID, network registration, MACs
   check            Health check: modem, generator, frames, services (read-only)
-  rotate           Rotate both slot IMEIs and cycle RF for re-attach
-  rotate-wireless  Rotate MACs/SSIDs/hostname/password now (respects option flags)
+  rotate           Rotate both slot IMEIs and cycle RF for re-attach (partial, live — NOT a clean break; use new-identity for unlinkability)
+  rotate-wireless  Rotate MACs/SSIDs/hostname/password now (respects option flags) (partial, live — NOT a clean break; use new-identity for unlinkability)
+  new-identity     Full clean rotation: new profile, every identifier, reboot (recommended)
   sim-swap         Disable RF, write throwaway IMEIs, poweroff; Stage 2 (final IMEI write) runs on next boot
   restore          Restore all factory IMEIs, MACs, SSIDs, and hostname
   help             Show this help
@@ -497,6 +500,23 @@ case "$cmd" in
     rotate-wireless)
         _save_factory_state || exit 1
         _rotate_wireless
+        ;;
+
+    new-identity)
+        _save_factory_state || exit 1
+        echo "norypt-ghost: staging new device identity..."
+        _screen_splash rotating
+        _id="$(IDENTITY_STAGE)" || { echo "staging failed" >&2; _screen_fail; exit 1; }
+        echo "  Profile: $_id"
+        echo "  SSID:    $(uci -q get wireless.wifi2g.ssid)"
+        # QR on the framebuffer if available (Task C1); text otherwise.
+        if command -v _render_join_qr >/dev/null 2>&1; then
+            _render_join_qr "$(uci -q get wireless.wifi2g.ssid)" "$(uci -q get wireless.wifi2g.key)"
+        fi
+        echo "norypt-ghost: rebooting in 5s to apply the new identity cleanly."
+        echo "  Scan the QR on the device screen to rejoin Wi-Fi."
+        sleep 5
+        /sbin/reboot
         ;;
 
     sim-swap)
