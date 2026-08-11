@@ -1,101 +1,100 @@
 {
-  "_comment": "Norypt Ghost device-profile catalog. One coherent real-device archetype per entry: for every wifi_oui, the oui_pool.json vendor/brand label MUST equal the profile's vendor field AND the ssid_format brand (HOME-{4hex} is the only generic exception, paired with a generic identity, never a specific brand claim). A branded SSID over another vendor's OUI is an incoherent fingerprint any BSSID lookup unmasks. TACs must be verified against a TAC database and sourced before a release build (validator --release enforces this). OUIs must be universally-administered (LA bit clear). wifi_oui values are drawn from oui_pool.json's router-class entries (AP/hotspot side); client_oui values are drawn from oui_pool.json's client-class entries (Apple/Intel/Dell/Samsung laptops+phones acting as upstream clients) and must never overlap the profile's own wifi_oui.",
+  "_comment": "SPDX-License-Identifier: GPL-2.0-only. Norypt Ghost device-profile catalog. One coherent real-device archetype per entry: the IMEI TAC vendor, the wifi_oui vendor, and the SSID hotspot name are the same phone vendor by construction. This build is PHONE-ONLY — the Mudi 7 presents as a popular smartphone tethering its SIM, which is both a large anonymity set and, per the modem-hotspot community itself, the recommended cover (a phone IMEI reads as a phone on the carrier network). TACs are verified: each is the first 8 digits of a real device IMEI recorded in Swappa's IMEI database for that exact model (source URL per entry). OUIs are real vendor WLAN OUIs (universally-administered) drawn from oui_pool.json; the runtime forces the locally-administered bit at generation, which matches how modern phones randomize their SoftAP BSSID. Region is the fallback when the SIM's MCC is unreadable.",
   "profiles": [
     {
-      "id": "netgear-nighthawk-m6-na",
-      "class": "hotspot", "region": "NA", "vendor": "NETGEAR",
+      "id": "apple-iphone-15-pro-eu",
+      "class": "phone", "region": "EU", "vendor": "Apple",
       "imei_tacs": [
-        { "tac": "86437503", "device": "Netgear Nighthawk M6 Pro (MR6450)",
-          "verified": false, "source": "TODO: verify against TAC DB" }
+        { "tac": "35937079", "device": "Apple iPhone 15 Pro (A3102, intl)", "verified": true, "source": "https://swappa.com/imei/info/359370797011487" },
+        { "tac": "35611698", "device": "Apple iPhone 15 Pro (A3102, intl)", "verified": true, "source": "https://swappa.com/imei/info/356116982606885" },
+        { "tac": "35988934", "device": "Apple iPhone 15 Pro (A3102, intl)", "verified": true, "source": "https://swappa.com/imei/info/359889342054924" }
       ],
-      "wifi_oui": ["A0:63:91", "C0:3F:0E", "20:E5:2A"],
-      "client_oui": ["3C:22:FB", "88:66:5A"],
-      "ssid_format": "NETGEAR-{4hex}",
+      "wifi_oui": ["3C:22:FB", "40:98:AD", "88:66:5A"],
+      "client_oui": ["F4:D4:88", "AC:DE:48"],
+      "ssid_format": "iPhone",
       "psk_format": "{10lower}",
-      "hostname_format": "Nighthawk-M6",
-      "dhcp_hostname_format": "android-{16hex}",
-      "bands": ["n2", "n5", "n25", "n41", "n66", "n71", "n77", "n78"],
+      "hostname_format": "iPhone",
+      "dhcp_hostname_format": "iPhone",
+      "bands": ["n1", "n3", "n7", "n28", "n78"],
       "weight": 3
     },
     {
-      "id": "tplink-m7450-na",
-      "class": "hotspot", "region": "NA", "vendor": "TP-Link",
+      "id": "apple-iphone-15-pro-us",
+      "class": "phone", "region": "NA", "vendor": "Apple",
       "imei_tacs": [
-        { "tac": "86225104", "device": "TP-Link M7450 5G Mobile WiFi",
-          "verified": false, "source": "TODO: verify against TAC DB" }
+        { "tac": "35343165", "device": "Apple iPhone 15 Pro (A2848, US)", "verified": true, "source": "https://swappa.com/imei/info/353431659106306" }
       ],
-      "wifi_oui": ["EC:08:6B", "F0:9F:C2", "18:A6:F7"],
-      "client_oui": ["8C:85:90", "F8:0F:41"],
-      "ssid_format": "TP-LINK_{4hex}",
-      "psk_format": "{8digits}",
-      "hostname_format": "TP-Link-M7450",
-      "dhcp_hostname_format": "android-{12hex}",
-      "bands": ["n2", "n5", "n25", "n41", "n66", "n71", "n77", "n78"],
+      "wifi_oui": ["3C:22:FB", "40:98:AD", "88:66:5A"],
+      "client_oui": ["F4:D4:88", "AC:DE:48"],
+      "ssid_format": "iPhone",
+      "psk_format": "{10lower}",
+      "hostname_format": "iPhone",
+      "dhcp_hostname_format": "iPhone",
+      "bands": ["n2", "n5", "n25", "n41", "n66", "n77", "n78"],
       "weight": 3
     },
     {
-      "id": "linksys-hotspot-na",
-      "class": "hotspot", "region": "NA", "vendor": "Linksys",
+      "id": "apple-iphone-14-pro",
+      "class": "phone", "region": "NA", "vendor": "Apple",
       "imei_tacs": [
-        { "tac": "86614103", "device": "Linksys 5G Mobile Hotspot",
-          "verified": false, "source": "TODO: verify against TAC DB" }
+        { "tac": "35456916", "device": "Apple iPhone 14 Pro (A2890)", "verified": true, "source": "https://swappa.com/imei/info/354569161601105" },
+        { "tac": "35022562", "device": "Apple iPhone 14 Pro (A2890)", "verified": true, "source": "https://swappa.com/imei/info/350225626770290" },
+        { "tac": "35004678", "device": "Apple iPhone 14 Pro (A2890)", "verified": true, "source": "https://swappa.com/imei/info/350046781813802" }
       ],
-      "wifi_oui": ["48:F8:B3", "30:23:03", "C0:56:27"],
-      "client_oui": ["18:CC:18", "8C:C8:4B"],
-      "ssid_format": "LINKSYS-{4hex}",
-      "psk_format": "{10digits}",
-      "hostname_format": "Linksys-Hotspot",
-      "dhcp_hostname_format": "android-{10hex}",
-      "bands": ["n2", "n5", "n25", "n41", "n66", "n71", "n77", "n78"],
-      "weight": 3
+      "wifi_oui": ["3C:22:FB", "40:98:AD", "88:66:5A"],
+      "client_oui": ["F4:D4:88", "AC:DE:48"],
+      "ssid_format": "iPhone",
+      "psk_format": "{10lower}",
+      "hostname_format": "iPhone",
+      "dhcp_hostname_format": "iPhone",
+      "bands": ["n2", "n5", "n25", "n41", "n66", "n77", "n78"],
+      "weight": 2
     },
     {
       "id": "samsung-galaxy-s24-ultra-eu",
       "class": "phone", "region": "EU", "vendor": "Samsung",
       "imei_tacs": [
-        { "tac": "35812092", "device": "Samsung Galaxy S24 Ultra (SM-S928B, EU)",
-          "verified": false, "source": "TODO: verify against TAC DB" }
+        { "tac": "35573167", "device": "Samsung Galaxy S24 Ultra (SM-S928B/DS, EU)", "verified": true, "source": "https://swappa.com/imei/info/355731671883750" }
       ],
-      "wifi_oui": ["00:25:9C", "88:15:44"],
-      "client_oui": ["18:CC:18", "8C:C8:4B", "70:28:8B"],
-      "ssid_format": "HOME-{4hex}",
-      "psk_format": "{8digits}",
-      "hostname_format": "Galaxy-S24-Ultra",
-      "dhcp_hostname_format": "Galaxy-S24-{4hex}",
-      "bands": ["n1", "n3", "n7", "n8", "n20", "n28", "n78"],
-      "weight": 2
-    },
-    {
-      "id": "apple-iphone-15-pro-eu",
-      "class": "phone", "region": "EU", "vendor": "Apple",
-      "imei_tacs": [
-        { "tac": "35298167", "device": "Apple iPhone 15 Pro (A2848, EU)",
-          "verified": false, "source": "TODO: verify against TAC DB" }
-      ],
-      "wifi_oui": ["F4:F5:DB", "88:15:44"],
-      "client_oui": ["AC:DE:48", "40:98:AD"],
-      "ssid_format": "HOME-{4hex}",
+      "wifi_oui": ["18:CC:18", "8C:C8:4B"],
+      "client_oui": ["70:28:8B"],
+      "ssid_format": "Galaxy-S24-{4hex}",
       "psk_format": "{10lower}",
-      "hostname_format": "iPhone-15-Pro",
-      "dhcp_hostname_format": "iPhone-{4hex}",
-      "bands": ["n1", "n3", "n7", "n8", "n20", "n28", "n78"],
-      "weight": 2
+      "hostname_format": "Galaxy-S24",
+      "dhcp_hostname_format": "android-{16hex}",
+      "bands": ["n1", "n3", "n7", "n28", "n78"],
+      "weight": 3
     },
     {
-      "id": "asus-hotspot-eu",
-      "class": "hotspot", "region": "EU", "vendor": "ASUS",
+      "id": "samsung-galaxy-s24-ultra-us",
+      "class": "phone", "region": "NA", "vendor": "Samsung",
       "imei_tacs": [
-        { "tac": "86751234", "device": "ASUS 5G Mobile Hotspot",
-          "verified": false, "source": "TODO: verify against TAC DB" }
+        { "tac": "35799425", "device": "Samsung Galaxy S24 Ultra (SM-S928U, US)", "verified": true, "source": "https://swappa.com/imei/info/357994257490972" }
       ],
-      "wifi_oui": ["04:92:26", "50:FF:20", "2C:FD:A1"],
-      "client_oui": ["F8:0F:41", "10:65:30", "28:16:AD"],
-      "ssid_format": "ASUS-{4hex}",
-      "psk_format": "{16digits}",
-      "hostname_format": "ASUS-Hotspot",
-      "dhcp_hostname_format": "ASUS-Client-{6hex}",
-      "bands": ["n1", "n3", "n7", "n8", "n20", "n28", "n78"],
+      "wifi_oui": ["18:CC:18", "8C:C8:4B"],
+      "client_oui": ["70:28:8B"],
+      "ssid_format": "Galaxy-S24-{4hex}",
+      "psk_format": "{10lower}",
+      "hostname_format": "Galaxy-S24",
+      "dhcp_hostname_format": "android-{16hex}",
+      "bands": ["n2", "n5", "n25", "n41", "n66", "n77", "n78"],
       "weight": 3
+    },
+    {
+      "id": "samsung-galaxy-s23-ultra-eu",
+      "class": "phone", "region": "EU", "vendor": "Samsung",
+      "imei_tacs": [
+        { "tac": "35871071", "device": "Samsung Galaxy S23 Ultra (SM-S918B/DS, EU)", "verified": true, "source": "https://swappa.com/imei/info/358710710617665" },
+        { "tac": "35883596", "device": "Samsung Galaxy S23 Ultra (SM-S918B/DS, EU)", "verified": true, "source": "https://swappa.com/imei/info/358835960364765" }
+      ],
+      "wifi_oui": ["18:CC:18", "8C:C8:4B"],
+      "client_oui": ["70:28:8B"],
+      "ssid_format": "Galaxy-S23-{4hex}",
+      "psk_format": "{10lower}",
+      "hostname_format": "Galaxy-S23",
+      "dhcp_hostname_format": "android-{16hex}",
+      "bands": ["n1", "n3", "n7", "n28", "n78"],
+      "weight": 2
     }
   ]
 }

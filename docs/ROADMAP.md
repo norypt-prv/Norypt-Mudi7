@@ -15,15 +15,20 @@ tests, all green in CI). **Not yet on-device verified** — see
 [Project Status](../README.md#project-status) for the acceptance pass still
 required before these are called shipped.
 
-- **Profile-coherent IMEI realism** (closes half of Item 1). A new
+- **Profile-coherent IMEI realism with verified TACs** (closes Item 1). A new
   `usr/share/norypt-ghost/profiles.json` catalog binds vendor, wifi/client
   OUI, SSID/hostname/password format, region, and TAC into one coherent
   real-device archetype per entry — `norypt-ghost new-identity` and the
   sim-swap Stage 2 path pick a whole profile, not independent random fields,
-  so the presented identity can no longer show a NETGEAR SSID over an Apple
-  OUI. **Not closed:** the TAC pool itself is still curated but individually
-  `verified: false` per-entry (see Item 1 below) — real TAC-database
-  verification against a source is still open.
+  so the presented identity can no longer show a mismatched SSID over a
+  different vendor's OUI. The catalog is **phone-only** (six popular Apple /
+  Samsung archetypes, EU + US): a phone tethering its SIM is a far larger
+  anonymity set than any single hotspot model, and reads as a phone on the
+  carrier network. **Every TAC is `verified: true`** — each is the first 8
+  digits of a real device IMEI recorded in Swappa's IMEI database for that
+  exact model, with the source URL stored per entry — and the CI host-test
+  job now runs the validator with `--release`, which fails the build if any
+  TAC is ever left unverified.
 - **Full-fingerprint `new-identity`** (closes Item 11). One command rotates
   IMEIs, all MACs (including wired — see below), SSID/hostname/passwords,
   SSH host keys, and the LuCI TLS cert together, across a reboot, and
@@ -67,25 +72,22 @@ These are cases where the package does not deliver what its design promises.
 
 ### 1. The TAC pool is entirely unverified · **S**
 
-**◐ Partially delivered** — see [Delivered](#delivered). Profile-vendor/OUI/TAC
-coherence now ships; per-entry TAC-database verification does not — every
-TAC is still `"verified": false` and the CI `verified:false`-fails-the-build
-gate described below has not been added.
+**✅ Delivered** — see [Delivered](#delivered). The catalog is now
+`profiles.json`, phone-only, with every TAC `verified: true` against a real
+Swappa device record (source URL per entry), and the CI `--release` gate
+fails the build on any unverified TAC. The legacy `tac_pool.json` remains
+only as the fallback pool for the random-IMEI mode of the live partial
+`rotate` path.
 
-`files/usr/share/norypt-ghost/tac_pool.json` ships **7 TACs, every one marked
-`"verified": false`** with `"source": "TODO: verify at hicelltek.com"`. The
-file's own header warns that an LTE-only TAC on a 5G cell caused confirmed
-carrier throttling. So the single most security-relevant data file in the
-package is unvalidated.
+Historical context (the problem this closed): the original `tac_pool.json`
+shipped 7 TACs, every one `"verified": false`. Its own header warned that an
+LTE-only TAC on a 5G cell caused confirmed carrier throttling — the single
+most security-relevant data file in the package was unvalidated, and a small
+pool cycling on one cell is itself a rotation-tool fingerprint.
 
-Worse, a 7-entry pool is itself a fingerprint: a carrier that sees IMEIs from
-the same seven TACs cycling on one cell — or worse, against one IMSI — learns
-it is looking at a rotation tool, not seven different devices.
-
-**Fix:** verify each TAC against a real TAC database, record the source URL,
-flip `verified` to true, and expand to 30–60 entries weighted toward mobile
-hotspots and popular handsets on the target market's bands. Add a CI check
-that fails the build if any entry is `verified: false`.
+**Still open (optional):** expand the catalog beyond six archetypes if a
+larger anonymity set is wanted, and periodically refresh TACs as new flagship
+models ship.
 
 The sibling `oui_pool.json` needs the same treatment. Its header asserts
 "All OUIs are universally-administered (bit 0 of first byte = 0, bit 1 = 0)",

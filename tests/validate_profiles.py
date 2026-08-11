@@ -52,12 +52,25 @@ def validate(catalog, release=False):
                         errors.append(f'{pid}: {key} bad token kind {kind}')
     return errors, warnings
 
+# Realistic personal-hotspot SSID tokens per phone vendor. A phone-class
+# profile's SSID names the phone's own hotspot (iPhone / Galaxy / AndroidAP),
+# not the vendor string a router SSID would carry.
+_PHONE_SSID_TOKENS = {
+    'APPLE':   ('IPHONE', 'IPAD'),
+    'SAMSUNG': ('GALAXY', 'ANDROIDAP'),
+    'GOOGLE':  ('PIXEL', 'ANDROIDAP'),
+}
+
 def coherence(catalog):
     errs = []
     for p in catalog['profiles']:
         v = p['vendor'].upper()
         fmt = p['ssid_format'].upper()
-        if v not in fmt and not fmt.startswith('HOME-'):
+        if p.get('class') == 'phone':
+            tokens = _PHONE_SSID_TOKENS.get(v, ())
+            if not (any(t in fmt for t in tokens) or fmt.startswith('HOME-')):
+                errs.append(f'{p["id"]}: phone SSID {p["ssid_format"]!r} does not match a {v} hotspot name {tokens or "(unknown vendor)"}')
+        elif v not in fmt and not fmt.startswith('HOME-'):
             errs.append(f'{p["id"]}: SSID format {p["ssid_format"]!r} does not name vendor {v}')
         if set(p.get('wifi_oui', [])) & set(p.get('client_oui', [])):
             errs.append(f'{p["id"]}: wifi_oui and client_oui overlap')
