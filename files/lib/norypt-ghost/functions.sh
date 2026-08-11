@@ -189,9 +189,17 @@ GENERATE_IMEI() {
 
 # Generate an IMEI for a given slot using the specified mode.
 # Falls back to random if deterministic/static fails (no IMSI or no static value set).
-# $1 = slot (1 or 2), $2 = mode (random|deterministic|static)
+# $1 = slot (1 or 2), $2 = mode (random|deterministic|static|profile), $3 = profile TAC (profile mode)
 _gen_imei() {
-    local slot="$1" mode="$2"
+    local slot="$1" mode="$2" tac="$3"
+    if [ "$mode" = "profile" ]; then
+        if [ -n "$tac" ]; then
+            lua /lib/norypt-ghost/imei_generate.lua fromtac "$tac"
+        else
+            GENERATE_IMEI
+        fi
+        return
+    fi
     if [ "$mode" = "deterministic" ]; then
         local imsi
         if [ "$slot" = "1" ]; then
