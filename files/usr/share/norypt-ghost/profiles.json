@@ -1,5 +1,5 @@
 {
-  "_comment": "Norypt Ghost device-profile catalog. One coherent real-device archetype per entry: the IMEI TAC vendor, the wifi_oui vendor, and the SSID brand are the same vendor by construction. TACs must be verified against a TAC database and sourced before a release build (validator --release enforces this). OUIs must be universally-administered (LA bit clear). wifi_oui values are drawn from oui_pool.json's router-class entries (AP/hotspot side); client_oui values are drawn from oui_pool.json's client-class entries (Apple/Intel/Dell/Samsung laptops+phones acting as upstream clients). Where a phone or hotspot vendor has no registered OUI block in oui_pool.json (Inseego, AVM), a generic router-class OUI stands in for the AP radio, matching real-world ODM WiFi-chip reuse across branded products.",
+  "_comment": "Norypt Ghost device-profile catalog. One coherent real-device archetype per entry: for every wifi_oui, the oui_pool.json vendor/brand label MUST equal the profile's vendor field AND the ssid_format brand (HOME-{4hex} is the only generic exception, paired with a generic identity, never a specific brand claim). A branded SSID over another vendor's OUI is an incoherent fingerprint any BSSID lookup unmasks. TACs must be verified against a TAC database and sourced before a release build (validator --release enforces this). OUIs must be universally-administered (LA bit clear). wifi_oui values are drawn from oui_pool.json's router-class entries (AP/hotspot side); client_oui values are drawn from oui_pool.json's client-class entries (Apple/Intel/Dell/Samsung laptops+phones acting as upstream clients) and must never overlap the profile's own wifi_oui.",
   "profiles": [
     {
       "id": "netgear-nighthawk-m6-na",
@@ -34,17 +34,17 @@
       "weight": 3
     },
     {
-      "id": "inseego-mifi-x-pro-na",
-      "class": "hotspot", "region": "NA", "vendor": "Inseego",
+      "id": "linksys-hotspot-na",
+      "class": "hotspot", "region": "NA", "vendor": "Linksys",
       "imei_tacs": [
-        { "tac": "86614103", "device": "Inseego MiFi X Pro 5G",
+        { "tac": "86614103", "device": "Linksys 5G Mobile Hotspot",
           "verified": false, "source": "TODO: verify against TAC DB" }
       ],
-      "wifi_oui": ["58:EF:68", "FC:65:DE"],
+      "wifi_oui": ["48:F8:B3", "30:23:03", "C0:56:27"],
       "client_oui": ["18:CC:18", "8C:C8:4B"],
-      "ssid_format": "INSEEGO-{4hex}",
+      "ssid_format": "LINKSYS-{4hex}",
       "psk_format": "{10digits}",
-      "hostname_format": "MiFi-X-PRO-5G",
+      "hostname_format": "Linksys-Hotspot",
       "dhcp_hostname_format": "android-{10hex}",
       "bands": ["n2", "n5", "n25", "n41", "n66", "n71", "n77", "n78"],
       "weight": 3
@@ -82,18 +82,18 @@
       "weight": 2
     },
     {
-      "id": "avm-fritzbox-6850-5g-eu",
-      "class": "hotspot", "region": "EU", "vendor": "AVM",
+      "id": "asus-hotspot-eu",
+      "class": "hotspot", "region": "EU", "vendor": "ASUS",
       "imei_tacs": [
-        { "tac": "86751234", "device": "AVM FRITZ!Box 6850 5G",
+        { "tac": "86751234", "device": "ASUS 5G Mobile Hotspot",
           "verified": false, "source": "TODO: verify against TAC DB" }
       ],
-      "wifi_oui": ["48:F8:B3", "30:23:03", "C0:56:27"],
+      "wifi_oui": ["04:92:26", "50:FF:20", "2C:FD:A1"],
       "client_oui": ["F8:0F:41", "10:65:30", "28:16:AD"],
-      "ssid_format": "AVM-FRITZ-{4hex}",
+      "ssid_format": "ASUS-{4hex}",
       "psk_format": "{16digits}",
-      "hostname_format": "FRITZ-Box-6850-5G",
-      "dhcp_hostname_format": "FRITZ-Client-{6hex}",
+      "hostname_format": "ASUS-Hotspot",
+      "dhcp_hostname_format": "ASUS-Client-{6hex}",
       "bands": ["n1", "n3", "n7", "n8", "n20", "n28", "n78"],
       "weight": 3
     }
