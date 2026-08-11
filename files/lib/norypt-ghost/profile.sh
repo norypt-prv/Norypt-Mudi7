@@ -65,3 +65,85 @@ _mcc_region() {
         *) echo "$default" ;;
     esac
 }
+
+# List "id weight" for profiles in region $1.
+_profile_list_region() {
+    local region="$1" n i id reg wt
+    n="$(jsonfilter -i "$_PROFILES_PATH" -e '@.profiles[*].id' | wc -l)"
+    i=0
+    while [ "$i" -lt "$n" ]; do
+        reg="$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$i].region")"
+        if [ "$reg" = "$region" ]; then
+            id="$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$i].id")"
+            wt="$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$i].weight")"
+            echo "$id ${wt:-1}"
+        fi
+        i=$(( i + 1 ))
+    done
+}
+
+# Pick one profile id in region $1, weighted. Falls back to any region if empty.
+_profile_pick() {
+    local region="$1" pool total pick acc id wt
+    pool="$(_profile_list_region "$region")"
+    [ -n "$pool" ] || pool="$(_profile_list_region NA)$(printf '\n')$(_profile_list_region EU)"
+    total=0
+    while read -r id wt; do [ -n "$id" ] && total=$(( total + wt )); done <<EOF
+$pool
+EOF
+    [ "$total" -gt 0 ] || return 1
+    pick=$(_rand_below "$total"); acc=0
+    while read -r id wt; do
+        [ -n "$id" ] || continue
+        acc=$(( acc + wt ))
+        [ "$pick" -lt "$acc" ] && { echo "$id"; return 0; }
+    done <<EOF
+$pool
+EOF
+}
+
+# Index of the profile with id $1.
+_profile_index() {
+    local want="$1" n i id
+    n="$(jsonfilter -i "$_PROFILES_PATH" -e '@.profiles[*].id' | wc -l)"
+    i=0
+    while [ "$i" -lt "$n" ]; do
+        id="$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$i].id")"
+        [ "$id" = "$want" ] && { echo "$i"; return 0; }
+        i=$(( i + 1 ))
+    done
+    return 1
+}
+
+# Pick a random element from the jsonfilter array at path $2 of profile index $1.
+_profile_pick_array() {
+    local idx="$1" path="$2" vals cnt
+    vals="$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$idx].$path")"
+    cnt="$(printf '%s\n' "$vals" | grep -c '.')"
+    [ "$cnt" -gt 0 ] || return 1
+    printf '%s\n' "$vals" | sed -n "$(( $(_rand_below "$cnt") + 1 ))p"
+}
+
+# Derive every identifier for profile id $1 into NG_* shell vars.
+_profile_derive() {
+    local id="$1" idx
+    idx="$(_profile_index "$id")" || return 1
+    # shellcheck disable=SC2034  # consumed by callers (identity.sh) as a global
+    NG_VENDOR="$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$idx].vendor")"
+    NG_TAC="$(_profile_pick_array "$idx" 'imei_tacs[*].tac')"
+    NG_WIFI_OUI="$(_profile_pick_array "$idx" 'wifi_oui[*]')"
+    # shellcheck disable=SC2034  # consumed by callers (identity.sh) as a global
+    NG_CLIENT_OUI="$(_profile_pick_array "$idx" 'client_oui[*]')"
+    NG_SSID="$(_expand_format "$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$idx].ssid_format")")"
+    # shellcheck disable=SC2034  # consumed by callers (identity.sh) as a global
+    NG_GUEST_SSID="${NG_SSID}-Guest"
+    # shellcheck disable=SC2034  # consumed by callers (identity.sh) as a global
+    NG_PSK="$(_expand_format "$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$idx].psk_format")")"
+    # shellcheck disable=SC2034  # consumed by callers (identity.sh) as a global
+    NG_GUEST_PSK="$(_expand_format "$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$idx].psk_format")")"
+    # shellcheck disable=SC2034  # consumed by callers (identity.sh) as a global
+    NG_HOSTNAME="$(_expand_format "$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$idx].hostname_format")")"
+    # shellcheck disable=SC2034  # consumed by callers (identity.sh) as a global
+    NG_DHCP_HOSTNAME="$(_expand_format "$(jsonfilter -i "$_PROFILES_PATH" -e "@.profiles[$idx].dhcp_hostname_format")")"
+    [ -n "$NG_TAC" ] && [ -n "$NG_WIFI_OUI" ]
+}

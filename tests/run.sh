@@ -11,7 +11,7 @@ shellcheck -s sh files/usr/bin/norypt-ghost files/usr/libexec/norypt-ghost \
     files/lib/norypt-ghost/*.sh files/etc/init.d/norypt-ghost-*
 
 echo "== profile validator =="
-python3 tests/validate_profiles.py files/usr/share/norypt-ghost/profiles.json "$@"
+python3 tests/validate_profiles.py files/usr/share/norypt-ghost/profiles.json --coherence "$@"
 
 echo "== python logic tests =="
 python3 -m unittest discover -s tests -p 'test_*.py' -v

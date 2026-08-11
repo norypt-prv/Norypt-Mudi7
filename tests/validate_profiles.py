@@ -52,8 +52,20 @@ def validate(catalog, release=False):
                         errors.append(f'{pid}: {key} bad token kind {kind}')
     return errors, warnings
 
+def coherence(catalog):
+    errs = []
+    for p in catalog['profiles']:
+        v = p['vendor'].upper()
+        fmt = p['ssid_format'].upper()
+        if v not in fmt and not fmt.startswith('HOME-'):
+            errs.append(f'{p["id"]}: SSID format {p["ssid_format"]!r} does not name vendor {v}')
+        if set(p.get('wifi_oui', [])) & set(p.get('client_oui', [])):
+            errs.append(f'{p["id"]}: wifi_oui and client_oui overlap')
+    return errs
+
 def main(argv):
     release = '--release' in argv
+    check_coherence = '--coherence' in argv
     paths = [a for a in argv[1:] if not a.startswith('--')]
     catalog = json.load(open(paths[0]))
     errors, warnings = validate(catalog, release)
@@ -61,6 +73,11 @@ def main(argv):
     for e in errors:   print(f'FAIL  {e}')
     if errors:
         print(f'\n{len(errors)} error(s).'); return 1
+    if check_coherence:
+        coherence_errors = coherence(catalog)
+        for e in coherence_errors: print(f'FAIL  {e}')
+        if coherence_errors:
+            print(f'\n{len(coherence_errors)} coherence error(s).'); return 1
     print(f'OK — {len(catalog["profiles"])} profiles, {len(warnings)} warning(s).')
     return 0
 
