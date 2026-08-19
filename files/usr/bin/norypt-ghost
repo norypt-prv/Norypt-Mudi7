@@ -1,11 +1,10 @@
 #!/usr/bin/env ash
 # Norypt Ghost — CLI entry point
 # Usage:
-#   norypt-ghost install                                      — capture factory state (run once)
+#   norypt-ghost install                                      — setup only: enable services, write defaults (run once)
 #   norypt-ghost status                                       — print per-slot IMEI/IMSI/ICCID + MACs
 #   norypt-ghost rotate [--slot1=random|det] [--slot2=random|det]  — rotate both IMEIs + re-attach
 #   norypt-ghost sim-swap [--slot1=random|det] [--slot2=random|det] — write throwaway IMEIs + poweroff; Stage 2 runs on next boot
-#   norypt-ghost restore                                      — restore all factory values
 #
 # Mode flags apply to rotate and sim-swap:
 #   --slot1=random        slot 1 gets a fresh random IMEI (default)
@@ -21,152 +20,6 @@
 . /lib/norypt-ghost/functions.sh
 # shellcheck source=/dev/null
 . /lib/norypt-ghost/identity.sh
-
-FACTORY_CFG=/etc/config/norypt-ghost
-
-# ── Factory state helpers ─────────────────────────────────────────────────────
-
-# Read one value from the factory section: _get_factory <key>
-_get_factory() {
-    uci -c /etc/config get "norypt-ghost.factory.$1" 2>/dev/null
-}
-
-# Backward-compat: read the single legacy factory_imei from settings section.
-_get_factory_imei() {
-    uci -c /etc/config get norypt-ghost.settings.factory_imei 2>/dev/null
-}
-
-# Capture factory state.
-# Guards: skips if both IMEI and WiFi keys are already saved.
-# Upgrade-path: if IMEI is saved but WiFi keys are not, captures keys only.
-# Can also be invoked explicitly via: norypt-ghost install
-_save_factory_state() {
-    local existing existing_key _need_sta
-    existing=$(_get_factory slot1_imei 2>/dev/null)
-    existing_key=$(_get_factory wifi2g_key 2>/dev/null)
-
-    # Check if sta_mac needs saving (repeater connected after initial install).
-    _need_sta=0
-    if [ -z "$(_get_factory sta_mac 2>/dev/null)" ]; then
-        uci get wireless.sta >/dev/null 2>&1 && \
-            [ -n "$(uci -q get wireless.sta.macaddr 2>/dev/null)" ] && \
-            _need_sta=1
-    fi
-
-    # All data saved — nothing to do.
-    [ -n "$existing" ] && [ -n "$existing_key" ] && [ "$_need_sta" = "0" ] && return 0
-
-    echo "norypt-ghost: capturing factory state..."
-
-    # ── IMEIs + MACs + SSIDs + hostname — only on first install ───────────
-    if [ -z "$existing" ]; then
-        local slot1_imei slot2_imei
-        slot1_imei=$(READ_IMEI)
-        slot2_imei=$(READ_IMEI_SLOT2)
-        if [ -z "$slot1_imei" ]; then
-            echo "norypt-ghost: could not read IMEI — aborting factory capture" >&2
-            return 1
-        fi
-
-        # MACs: prefer factory_macaddr (GL-iNet RAWDATA-backed value)
-        local wifi2g_mac wifi5g_mac wifi6g_mac
-        local guest2g_mac guest5g_mac guest6g_mac sta_mac
-        for _iface in wifi2g wifi5g wifi6g guest2g guest5g guest6g; do
-            eval "${_iface}_mac=\$(uci -q get wireless.${_iface}.factory_macaddr 2>/dev/null || uci -q get wireless.${_iface}.macaddr 2>/dev/null)"
-        done
-        sta_mac=$(uci -q get wireless.sta.macaddr 2>/dev/null)
-
-        # SSIDs
-        local wifi2g_ssid wifi5g_ssid wifi6g_ssid guest_ssid guest5g_ssid guest6g_ssid hostname
-        wifi2g_ssid=$(uci -q get wireless.wifi2g.ssid 2>/dev/null)
-        wifi5g_ssid=$(uci -q get wireless.wifi5g.ssid 2>/dev/null)
-        wifi6g_ssid=$(uci -q get wireless.wifi6g.ssid 2>/dev/null)
-        guest_ssid=$(uci -q get wireless.guest2g.ssid 2>/dev/null)
-        guest5g_ssid=$(uci -q get wireless.guest5g.ssid 2>/dev/null)
-        guest6g_ssid=$(uci -q get wireless.guest6g.ssid 2>/dev/null)
-        hostname=$(uci -q get system.@system[0].hostname 2>/dev/null)
-
-        [ -f "$FACTORY_CFG" ] || touch "$FACTORY_CFG"
-        uci -c /etc/config set norypt-ghost.factory=norypt-ghost
-        uci -c /etc/config set norypt-ghost.factory.slot1_imei="$slot1_imei"
-        uci -c /etc/config set norypt-ghost.factory.slot2_imei="$slot2_imei"
-        uci -c /etc/config set norypt-ghost.factory.wifi2g_mac="$wifi2g_mac"
-        uci -c /etc/config set norypt-ghost.factory.wifi5g_mac="$wifi5g_mac"
-        uci -c /etc/config set norypt-ghost.factory.wifi6g_mac="$wifi6g_mac"
-        uci -c /etc/config set norypt-ghost.factory.guest2g_mac="$guest2g_mac"
-        uci -c /etc/config set norypt-ghost.factory.guest5g_mac="$guest5g_mac"
-        uci -c /etc/config set norypt-ghost.factory.guest6g_mac="$guest6g_mac"
-        uci -c /etc/config set norypt-ghost.factory.sta_mac="$sta_mac"
-        uci -c /etc/config set norypt-ghost.factory.wifi2g_ssid="$wifi2g_ssid"
-        uci -c /etc/config set norypt-ghost.factory.wifi5g_ssid="$wifi5g_ssid"
-        uci -c /etc/config set norypt-ghost.factory.wifi6g_ssid="$wifi6g_ssid"
-        uci -c /etc/config set norypt-ghost.factory.guest_ssid="$guest_ssid"
-        uci -c /etc/config set norypt-ghost.factory.guest5g_ssid="$guest5g_ssid"
-        uci -c /etc/config set norypt-ghost.factory.guest6g_ssid="$guest6g_ssid"
-        uci -c /etc/config set norypt-ghost.factory.hostname="$hostname"
-
-        # Wired MAC (first device that has one) + WAN DHCP hostname — captured
-        # here too, so restore/uninstall can revert what RANDOMIZE_WIRED_MAC and
-        # IDENTITY_STAGE rotate on network.@device[*] and network.wan.
-        local wired_mac wan_hostname _dev_i
-        wired_mac=""
-        _dev_i=0
-        while :; do
-            uci -q get "network.@device[$_dev_i]" >/dev/null 2>&1 || break
-            if [ -z "$wired_mac" ]; then
-                wired_mac=$(uci -q get "network.@device[$_dev_i].macaddr" 2>/dev/null)
-            fi
-            _dev_i=$(( _dev_i + 1 ))
-        done
-        wan_hostname=$(uci -q get network.wan.hostname 2>/dev/null)
-        [ -n "$wired_mac" ] && uci -c /etc/config set norypt-ghost.factory.wired_mac="$wired_mac"
-        [ -n "$wan_hostname" ] && uci -c /etc/config set norypt-ghost.factory.wan_hostname="$wan_hostname"
-
-        echo "  IMEI (slot 1):   $slot1_imei"
-        echo "  IMEI (slot 2):   $slot2_imei"
-        echo "  WiFi MAC (2.4g): $wifi2g_mac"
-        echo "  SSID:            $wifi2g_ssid"
-        echo "  Hostname:        $hostname"
-    fi
-
-    # ── WiFi keys — first install or upgrade from pre-Phase-2 install ─────
-    if [ -z "$existing_key" ]; then
-        local wifi2g_key guest2g_key
-        wifi2g_key=$(uci -q get wireless.wifi2g.key 2>/dev/null)
-        guest2g_key=$(uci -q get wireless.guest2g.key 2>/dev/null)
-        uci -c /etc/config set norypt-ghost.factory=norypt-ghost
-        uci -c /etc/config set norypt-ghost.factory.wifi2g_key="$wifi2g_key"
-        uci -c /etc/config set norypt-ghost.factory.guest2g_key="$guest2g_key"
-        echo "  WiFi keys saved: main + guest"
-    fi
-
-    # ── STA (repeater) MAC — may be absent if repeater wasn't connected at install ──
-    local existing_sta
-    existing_sta=$(_get_factory sta_mac 2>/dev/null)
-    if [ -z "$existing_sta" ] && uci get wireless.sta >/dev/null 2>&1; then
-        local sta_mac
-        sta_mac=$(uci -q get wireless.sta.macaddr 2>/dev/null)
-        if [ -n "$sta_mac" ]; then
-            uci -c /etc/config set norypt-ghost.factory=norypt-ghost
-            uci -c /etc/config set norypt-ghost.factory.sta_mac="$sta_mac"
-            echo "  STA MAC saved: $sta_mac"
-        fi
-    fi
-
-    # ── Options section — defaults to all-on; Phase 3 LuCI writes these ──────
-    # Only initialize if section doesn't exist yet (never overwrite user settings).
-    if ! uci -q get norypt-ghost.options >/dev/null 2>&1; then
-        uci -c /etc/config set norypt-ghost.options=norypt-ghost
-        uci -c /etc/config set norypt-ghost.options.randomize_mac=1
-        uci -c /etc/config set norypt-ghost.options.randomize_ssid=1
-        uci -c /etc/config set norypt-ghost.options.randomize_hostname=1
-        uci -c /etc/config set norypt-ghost.options.randomize_password=1
-        uci -c /etc/config set norypt-ghost.options.randomize_on_boot=1
-    fi
-
-    uci -c /etc/config commit norypt-ghost
-    echo "norypt-ghost: factory state saved to $FACTORY_CFG"
-}
 
 # ── Status ────────────────────────────────────────────────────────────────────
 
@@ -185,15 +38,6 @@ _print_status() {
     _imsi2=$(READ_IMSI_SLOT2 2>/dev/null) && echo "  IMSI:  $_imsi2" || echo "  IMSI:  [not available]"
     echo "  ICCID: $(READ_ICCID_SLOT2)"
     echo ""
-    local _f1 _f2
-    _f1=$(_get_factory slot1_imei)
-    _f2=$(_get_factory slot2_imei 2>/dev/null || _get_factory field11_imei 2>/dev/null)
-    if [ -n "$_f1" ]; then
-        echo "Factory IMEIs:"
-        echo "  Slot 1: $_f1"
-        [ -n "$_f2" ] && echo "  Slot 2: $_f2"
-        echo ""
-    fi
     echo "Active data slot: $(READ_ACTIVE_SLOT)"
     echo ""
     echo "=== Network ==="
@@ -327,11 +171,6 @@ _run_check() {
 
     echo ""
     echo "State:"
-    if [ -n "$(_get_factory slot1_imei)" ] || [ "$(_get_factory sealed)" = "1" ] || [ -n "$(_get_factory blob)" ]; then
-        _pass "factory state saved"
-    else
-        _warn "factory state not captured — run: norypt-ghost install"
-    fi
     if [ -f /etc/norypt-ghost.sim-swap-pending ]; then
         _warn "sim-swap Stage 2 pending — completes on next boot"
     fi
@@ -436,14 +275,13 @@ _usage() {
 Usage: norypt-ghost <command> [options]
 
 Commands:
-  install          Capture factory state (run once before first rotation)
+  install          Setup only: enable services, write defaults (run once)
   status           Show per-slot IMEI/IMSI/ICCID, network registration, MACs
   check            Health check: modem, generator, frames, services (read-only)
   rotate           Rotate both slot IMEIs and cycle RF for re-attach (partial, live — NOT a clean break; use new-identity for unlinkability)
   rotate-wireless  Rotate MACs/SSIDs/hostname/password now (respects option flags) (partial, live — NOT a clean break; use new-identity for unlinkability)
   new-identity     Full clean rotation: new profile, every identifier, reboot (recommended)
   sim-swap         Disable RF, write throwaway IMEIs, poweroff; Stage 2 (final IMEI write) runs on next boot
-  restore          Restore all factory IMEIs, MACs, SSIDs, and hostname
   help             Show this help
 
 Mode options (rotate / sim-swap):
@@ -508,17 +346,14 @@ case "$cmd" in
         ;;
 
     rotate)
-        _save_factory_state || exit 1
         _rotate "$_slot1_mode" "$_slot2_mode" "$_reboot"
         ;;
 
     rotate-wireless)
-        _save_factory_state || exit 1
         _rotate_wireless
         ;;
 
     new-identity)
-        _save_factory_state || exit 1
         echo "norypt-ghost: staging new device identity..."
         _screen_splash rotating
         _id="$(IDENTITY_STAGE)" || { echo "staging failed" >&2; _screen_fail; exit 1; }
@@ -535,8 +370,6 @@ case "$cmd" in
         ;;
 
     sim-swap)
-        _save_factory_state || exit 1
-
         echo "── Norypt Ghost SIM Swap ────────────────────────────────"
         echo "  Slot 1 mode: $_slot1_mode  |  Slot 2 mode: $_slot2_mode"
         echo ""
@@ -598,212 +431,6 @@ case "$cmd" in
         _screen_splash simswap
         sleep 5
         /sbin/poweroff
-        ;;
-
-    restore)
-        # If the factory section is sealed, decrypt it into the UNCOMMITTED uci
-        # delta so the existing _get_factory reads work unchanged. The plaintext
-        # is never committed, so it never reaches flash; we revert it at the end.
-        if [ "$(_get_factory sealed)" = "1" ]; then
-            # Sealed restore fundamentally needs a human to type the passphrase.
-            # Non-TTY callers (prerm, LuCI's backgrounded rpcd restore) would
-            # otherwise block forever on `read`, or worse, decrypt an empty
-            # passphrase silently. Fail loud instead.
-            if [ ! -t 0 ]; then
-                echo "norypt-ghost: factory state is SEALED — run 'norypt-ghost restore' from an interactive SSH session to enter the passphrase. Not restoring now." >&2
-                exit 1
-            fi
-            # shellcheck source=/dev/null
-            . /lib/norypt-ghost/seal.sh
-            _ng_blob="$(_get_factory blob)"
-            printf 'norypt-ghost: factory state is sealed.\nPassphrase: ' >&2
-            stty -echo 2>/dev/null; read -r _ng_pass; stty echo 2>/dev/null; echo >&2
-            _ng_plain="$(SEAL_DECRYPT "$_ng_blob" "$_ng_pass")" || {
-                echo "norypt-ghost: wrong passphrase or corrupt blob — aborting restore (RF untouched)" >&2
-                exit 1
-            }
-            # Load each 'norypt-ghost.factory.KEY=value' line into the uci delta.
-            while IFS= read -r _ng_line; do
-                case "$_ng_line" in norypt-ghost.factory.*=*) ;; *) continue ;; esac
-                _ng_k="${_ng_line%%=*}"
-                _ng_v="${_ng_line#*=}"
-                # uci show wraps values in single quotes and escapes an embedded
-                # ' as '\''; strip the outer quotes, then unescape that sequence
-                # back to a literal ' (e.g. an SSID like "Joe's WiFi").
-                _ng_v="${_ng_v#\'}"; _ng_v="${_ng_v%\'}"
-                _ng_out=""
-                while :; do
-                    case "$_ng_v" in
-                        *"'\''"*)
-                            _ng_out="${_ng_out}${_ng_v%%"'\''"*}'"
-                            _ng_v="${_ng_v#*"'\''"}"
-                            ;;
-                        *)
-                            _ng_out="${_ng_out}${_ng_v}"
-                            break
-                            ;;
-                    esac
-                done
-                _ng_v="$_ng_out"
-                uci -c /etc/config set "${_ng_k}=${_ng_v}"
-            done <<EOF
-$_ng_plain
-EOF
-            trap 'uci -c /etc/config revert norypt-ghost 2>/dev/null' EXIT
-        fi
-
-        _f_imei1=$(_get_factory slot1_imei)
-        _f_imei2=$(_get_factory slot2_imei 2>/dev/null)
-        # Fall back to old field11_imei name from earlier installs
-        [ -z "$_f_imei2" ] && _f_imei2=$(_get_factory field11_imei 2>/dev/null)
-        # Fall back to legacy single-IMEI config if factory section absent
-        [ -z "$_f_imei1" ] && _f_imei1=$(_get_factory_imei)
-
-        if [ -z "$_f_imei1" ]; then
-            echo "norypt-ghost: no factory state saved in $FACTORY_CFG" >&2
-            echo "norypt-ghost: run 'norypt-ghost install' first" >&2
-            exit 1
-        fi
-
-        _screen_splash restoring
-        echo "norypt-ghost: restoring factory IMEIs..."
-        echo "  Slot 1: $_f_imei1"
-        [ -n "$_f_imei2" ] && echo "  Slot 2: $_f_imei2"
-
-        MODEM_RF_DISABLE
-        SET_IMEI_SLOT1 "$_f_imei1" || {
-            echo "norypt-ghost: failed to restore slot 1 IMEI — RF left disabled" >&2
-            _recovery_hint
-            _screen_fail
-            exit 1
-        }
-        if [ -n "$_f_imei2" ]; then
-            SET_IMEI_SLOT2 "$_f_imei2" || {
-                echo "norypt-ghost: failed to restore slot 2 IMEI — RF left disabled" >&2
-                _recovery_hint
-                _screen_fail
-                exit 1
-            }
-        fi
-        _at AT+QPRTPARA=1 >/dev/null 2>&1
-
-        # Restore MACs.
-        echo "norypt-ghost: restoring factory MAC addresses..."
-        for _iface in wifi2g wifi5g wifi6g guest2g guest5g guest6g; do
-            _fmac=$(_get_factory "${_iface}_mac")
-            [ -n "$_fmac" ] && uci get "wireless.${_iface}" >/dev/null 2>&1 && \
-                uci set "wireless.${_iface}.macaddr=${_fmac}"
-        done
-        _sta_mac=$(_get_factory sta_mac)
-        if [ -n "$_sta_mac" ] && uci get wireless.sta >/dev/null 2>&1; then
-            uci set "wireless.sta.macaddr=${_sta_mac}"
-            uci -q set "repeater.@network[0].macaddr=r,${_sta_mac}" 2>/dev/null
-            uci commit repeater 2>/dev/null
-        fi
-        # Re-enable GL-iNet's BSSID randomization now that we've cleared our MACs.
-        RESTORE_RANDOM_BSSID
-        uci commit wireless
-
-        # Restore SSIDs.
-        echo "norypt-ghost: restoring factory SSIDs..."
-        for _iface in wifi2g wifi5g wifi6g; do
-            _fssid=$(_get_factory "${_iface}_ssid")
-            # Fall back to wifi2g_ssid for installs predating per-band SSID storage.
-            [ -z "$_fssid" ] && _fssid=$(_get_factory wifi2g_ssid)
-            [ -n "$_fssid" ] && uci get "wireless.${_iface}" >/dev/null 2>&1 && \
-                uci set "wireless.${_iface}.ssid=${_fssid}"
-        done
-        for _iface in guest2g guest5g guest6g; do
-            _gssid=$(_get_factory "${_iface}_ssid")
-            # Fall back to legacy guest_ssid key for older installs.
-            [ -z "$_gssid" ] && _gssid=$(_get_factory guest_ssid)
-            [ -n "$_gssid" ] && uci get "wireless.${_iface}" >/dev/null 2>&1 && \
-                uci set "wireless.${_iface}.ssid=${_gssid}"
-        done
-        uci commit wireless
-
-        # Restore WiFi passwords. Only the 2.4 GHz main/guest keys are captured
-        # at install and are re-applied to all bands — stock GL-iNet config
-        # shares one key across bands; per-band custom keys would be flattened.
-        echo "norypt-ghost: restoring factory WiFi passwords..."
-        _fkey=$(_get_factory wifi2g_key)
-        if [ -n "$_fkey" ]; then
-            for _iface in wifi2g wifi5g wifi6g; do
-                uci get "wireless.${_iface}" >/dev/null 2>&1 && \
-                    uci set "wireless.${_iface}.key=${_fkey}"
-            done
-        fi
-        _fgkey=$(_get_factory guest2g_key)
-        if [ -n "$_fgkey" ]; then
-            for _iface in guest2g guest5g guest6g; do
-                uci get "wireless.${_iface}" >/dev/null 2>&1 && \
-                    uci set "wireless.${_iface}.key=${_fgkey}"
-            done
-        fi
-        uci commit wireless
-
-        # Restore hostname.
-        _fhost=$(_get_factory hostname)
-        if [ -n "$_fhost" ]; then
-            echo "norypt-ghost: restoring hostname: $_fhost"
-            printf '%s' "$_fhost" > /proc/sys/kernel/hostname
-            uci set system.@system[0].hostname="$_fhost"
-            uci commit system
-        fi
-
-        # Restore wired MAC (first network.@device[*] that currently has one —
-        # only the first device's MAC was captured) and WAN DHCP hostname;
-        # reverts RANDOMIZE_WIRED_MAC / IDENTITY_STAGE.
-        _fwired=$(_get_factory wired_mac)
-        if [ -n "$_fwired" ]; then
-            _wdev_i=0
-            while :; do
-                uci -q get "network.@device[$_wdev_i]" >/dev/null 2>&1 || break
-                if uci -q get "network.@device[$_wdev_i].macaddr" >/dev/null 2>&1; then
-                    echo "norypt-ghost: restoring wired MAC: $_fwired"
-                    uci set "network.@device[$_wdev_i].macaddr=${_fwired}"
-                    break
-                fi
-                _wdev_i=$(( _wdev_i + 1 ))
-            done
-            uci commit network
-        fi
-        _fwanhost=$(_get_factory wan_hostname)
-        if [ -n "$_fwanhost" ] && uci -q get network.wan >/dev/null 2>&1; then
-            echo "norypt-ghost: restoring WAN DHCP hostname: $_fwanhost"
-            uci set network.wan.hostname="$_fwanhost"
-            uci commit network
-        fi
-
-        _reg_ok=1
-        MODEM_RESET_FOR_PRIVACY || _reg_ok=0
-        WIFI_RELOAD
-
-        # wifi reload regenerates wireless.sta.macaddr when random_bssid=1.
-        # Re-apply the factory STA MAC and push it to the live interface.
-        if [ -n "$_sta_mac" ] && uci get wireless.sta >/dev/null 2>&1; then
-            uci set "wireless.sta.macaddr=${_sta_mac}"
-            uci commit wireless
-            _sta_iface=$(uci -q get wireless.sta.ifname 2>/dev/null)
-            if [ -n "$_sta_iface" ]; then
-                ip link set "$_sta_iface" down 2>/dev/null
-                ip link set "$_sta_iface" address "$_sta_mac" 2>/dev/null
-                ip link set "$_sta_iface" up 2>/dev/null
-            fi
-        fi
-
-        echo "norypt-ghost: restore complete."
-        echo "  Slot 1 IMEI: $(READ_IMEI)"
-        echo "  Slot 2 IMEI: $(READ_IMEI_SLOT2)"
-        if [ "$_reg_ok" = "1" ]; then
-            _screen_splash "done"
-            sleep 2
-        else
-            echo "norypt-ghost: warning — modem has not re-registered yet; it keeps retrying in the background." >&2
-            _screen_splash warning
-            sleep 3
-        fi
-        _screen_restore_display
         ;;
 
     help|-h)

@@ -1,6 +1,6 @@
 #!/bin/sh
 # norypt-ghost rpcd exec backend — called by LuCI2 via fs.exec().
-# Subcommands: status, new_identity, rotate, rotate_wireless, restore,
+# Subcommands: status, new_identity, rotate, rotate_wireless,
 #              sim_swap, imsi, set:<key>=<val>, log
 
 . /lib/norypt-ghost/functions.sh
@@ -95,11 +95,6 @@ case "$1" in
     rotate_wireless)
         : > /tmp/norypt-ghost.log
         /usr/bin/norypt-ghost rotate-wireless >> /tmp/norypt-ghost.log 2>&1 &
-        printf '{"started":true}\n'
-        ;;
-    restore)
-        : > /tmp/norypt-ghost.log
-        /usr/bin/norypt-ghost restore >> /tmp/norypt-ghost.log 2>&1 &
         printf '{"started":true}\n'
         ;;
     sim_swap)
