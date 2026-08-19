@@ -24,7 +24,12 @@ _SCREENS_DIR=/usr/share/norypt-ghost/screens
 # Uses procd ubus delete before stop to prevent automatic respawn (gl_screen
 # has procd_set_param respawn which would otherwise restart it within seconds).
 # $1 = frame name (rotating|done|simswap|restoring|error|warning)
+# When the on-screen touch daemon drives us (NG_ONSCREEN set), it owns the panel
+# — gl_screen is SIGSTOP'd and the daemon is drawing directly to fb0. The CLI
+# must NOT touch gl_screen or fb0 here, or it would kill the frozen gl_screen
+# and fight the daemon for the framebuffer (a known draw-race).
 _screen_splash() {
+    [ -n "$NG_ONSCREEN" ] && return 0
     local frame="${_SCREENS_DIR}/${1}.rgb565"
     [ -f "$frame" ] || return 0
     ubus call service delete '{"name": "gl_screen"}' 2>/dev/null
@@ -42,6 +47,8 @@ _screen_splash() {
 # Only call from user-triggered operations (rotate, new-identity) — boot
 # scripts should not call this; S80 starts gl_screen automatically.
 _screen_restore_display() {
+    # Daemon-driven: it owns gl_screen (SIGSTOP'd) and will resume it itself.
+    [ -n "$NG_ONSCREEN" ] && return 0
     /etc/init.d/gl_screen start >/dev/null 2>&1
 }
 
@@ -586,6 +593,9 @@ _ng_wifi_payload() {
 # and returns 0 — the credentials are always available via the CLI and LuCI, and
 # rotation must never depend on this. Always returns 0.
 _render_join_qr() {
+    # Daemon-driven: the touch daemon owns fb0 and gl_screen is SIGSTOP'd —
+    # do not kill it or write fb0 from the CLI. QR stays available via CLI/LuCI.
+    [ -n "$NG_ONSCREEN" ] && return 0
     local ssid="$1" psk="$2" payload viewer png
     payload="$(_ng_wifi_payload "$ssid" "$psk")"
 

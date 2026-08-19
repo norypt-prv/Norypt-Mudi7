@@ -14,22 +14,23 @@
  * Reads /dev/input/event0 non-exclusively alongside gl_screen (no EVIOCGRAB),
  * so the stock UI keeps working while the menu is closed.
  *
- * The daemon owns fb0 only while a menu is on screen: fbdev_open() evicts
- * gl_screen on open, fbdev_close(.., 1) restarts it on exit. Actions that take
- * the device down (reboot / poweroff) intentionally do NOT restart gl_screen —
- * they leave the last frame up while the device goes down.
+ * The daemon owns fb0 only while a menu is on screen: fbdev_open() freezes
+ * gl_screen (SIGSTOP) and snapshots the stock frame, fbdev_close(.., 1) restores
+ * that frame and resumes gl_screen (SIGCONT) on exit. Actions that take the
+ * device down (reboot / poweroff) call fbdev_close(.., 0): leave the last frame
+ * up, do NOT restore, do NOT resume gl_screen — the device is going down.
  */
 
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include <linux/input.h>
 
 #include "fb.h"
@@ -119,17 +120,28 @@ static void sleep_ms(int ms)
     nanosleep(&ts, NULL);
 }
 
-/* Fork+exec the norypt-ghost CLI with one subcommand. Child detaches via
- * setsid() so it survives independently of the daemon. */
+/* Fork+exec the norypt-ghost CLI with one subcommand. Double-forks so the CLI
+ * grandchild reparents to init: the intermediate child exits immediately and is
+ * reaped here with a single waitpid, leaving no zombie and nothing to wait on
+ * for the long-running CLI itself. The grandchild detaches via setsid() and
+ * sets NG_ONSCREEN=1 so the CLI suppresses its own gl_screen/fb0 drawing while
+ * the daemon owns the panel (see functions.sh). */
 static void run_action(const char *subcmd)
 {
     pid_t pid = fork();
     if (pid == 0) {
-        setsid();
-        execl(CLI_PATH, "norypt-ghost", subcmd, (char *)NULL);
-        syslog(LOG_ERR, "execl %s %s failed", CLI_PATH, subcmd);
-        _exit(1);
-    } else if (pid < 0) {
+        pid_t g = fork();
+        if (g == 0) {
+            setsid();
+            setenv("NG_ONSCREEN", "1", 1);
+            execl(CLI_PATH, "norypt-ghost", subcmd, (char *)NULL);
+            syslog(LOG_ERR, "execl %s %s failed", CLI_PATH, subcmd);
+            _exit(127);
+        }
+        _exit(0);              /* intermediate exits immediately */
+    } else if (pid > 0) {
+        waitpid(pid, NULL, 0); /* reap the intermediate — instant */
+    } else {
         syslog(LOG_ERR, "fork failed for %s", subcmd);
     }
 }
@@ -208,8 +220,10 @@ int main(void)
 {
     openlog("norypt-ghost-touch", LOG_PID, LOG_DAEMON);
 
-    /* Ignore SIGCHLD so forked children are reaped automatically. */
-    signal(SIGCHLD, SIG_IGN);
+    /* No SIGCHLD handler: run_action() double-forks so the CLI grandchild
+     * reparents to init, and the intermediate child is reaped explicitly with
+     * waitpid. Leaving SIGCHLD at its default keeps system()/waitpid inside any
+     * library path working (SIG_IGN would make their waitpid fail with ECHILD). */
 
     int fd = open(EVENT_DEVICE, O_RDONLY);
     if (fd < 0) {
