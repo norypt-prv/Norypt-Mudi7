@@ -209,7 +209,7 @@ _rotate_wireless() {
             ip link set "$_sta_iface" up 2>/dev/null
         fi
     fi
-    date '+%Y-%m-%d %H:%M (manual)' > /etc/norypt-ghost.last_wireless_rotate
+    date '+%Y-%m-%d %H:%M (manual)' > /tmp/norypt-ghost.last_wireless_rotate
     echo "norypt-ghost: wireless identity rotated."
 }
 
@@ -249,7 +249,7 @@ _rotate() {
         return 1
     }
 
-    date '+%Y-%m-%d %H:%M (manual)' > /etc/norypt-ghost.last_imei_rotate
+    date '+%Y-%m-%d %H:%M (manual)' > /tmp/norypt-ghost.last_imei_rotate
 
     local _rot_new1 _rot_new2
     _rot_new1="$(READ_IMEI)"; _rot_new2="$(READ_IMEI_SLOT2)"

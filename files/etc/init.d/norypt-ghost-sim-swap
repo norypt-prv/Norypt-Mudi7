@@ -114,7 +114,7 @@ start() {
         return 1
     }
 
-    date '+%Y-%m-%d %H:%M (sim-swap)' > /etc/norypt-ghost.last_imei_rotate
+    date '+%Y-%m-%d %H:%M (sim-swap)' > /tmp/norypt-ghost.last_imei_rotate
 
     # Bring RF back on so gl_cellular_manager (S23) finds the modem in a
     # normal state and handles registration with the final IMEI.

@@ -35,8 +35,8 @@ case "$1" in
         _reg_timeout=$(uci -q get norypt-ghost.options.register_timeout 2>/dev/null)
         _opt_rat_lock=$(uci -q get norypt-ghost.options.rat_lock 2>/dev/null)
         _opt_default_region=$(uci -q get norypt-ghost.options.default_region 2>/dev/null)
-        _last_imei_rotate=$(cat /etc/norypt-ghost.last_imei_rotate 2>/dev/null)
-        _last_wireless_rotate=$(cat /etc/norypt-ghost.last_wireless_rotate 2>/dev/null)
+        _last_imei_rotate=$(cat /tmp/norypt-ghost.last_imei_rotate 2>/dev/null)
+        _last_wireless_rotate=$(cat /tmp/norypt-ghost.last_wireless_rotate 2>/dev/null)
         _touch_enabled=$([ -n "$(ls /etc/rc.d/S*norypt-ghost-touch 2>/dev/null)" ] && printf '1' || printf '0')
         printf '{"imei1":"%s","imei2":"%s","ssid":"%s","guest_ssid":"%s","mac_2g":"%s","mac_5g":"%s","mac_6g":"%s","mac_sta":"%s","mac_guest2g":"%s","mac_guest5g":"%s","mac_guest6g":"%s","hostname":"%s","wifi2g_key":"%s","guest2g_key":"%s","opt_mac":"%s","opt_ssid":"%s","opt_hostname":"%s","opt_password":"%s","opt_boot":"%s","imei_mode_slot1":"%s","imei_mode_slot2":"%s","static_imei_slot1":"%s","static_imei_slot2":"%s","register_timeout":"%s","rat_lock":"%s","default_region":"%s","last_imei_rotate":"%s","last_wireless_rotate":"%s","touch_enabled":"%s"}\n' \
             "${_imei1:----}" "${_imei2:----}" \

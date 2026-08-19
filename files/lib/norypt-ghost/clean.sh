@@ -29,6 +29,10 @@ CLEAN_APPLY() {
     # 4. DHCP leases to RAM (OpenWrt default is /tmp; enforce if GL redirected it).
     local lf; lf="$(uci -q get dhcp.@dnsmasq[0].leasefile 2>/dev/null)"
     case "$lf" in /tmp/*|"") ;; *) uci -q set dhcp.@dnsmasq[0].leasefile=/tmp/dhcp.leases; uci -q commit dhcp ;; esac
+    # 5. Sweep any legacy flash-persisted rotation timestamps. Older builds wrote
+    #    these to /etc; the no-log model keeps them in RAM (/tmp) only, so any
+    #    /etc copy is a forensic trace of when the identity last changed.
+    rm -f /etc/norypt-ghost.last_imei_rotate /etc/norypt-ghost.last_wireless_rotate 2>/dev/null
     logger -t norypt-ghost "clean: telemetry persistence disabled"
 }
 

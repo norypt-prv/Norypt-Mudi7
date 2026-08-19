@@ -28,7 +28,7 @@ start() {
     _opt_enabled randomize_ssid     && RANDOMIZE_SSID
     _opt_enabled randomize_hostname && RANDOMIZE_HOSTNAME
     _opt_enabled randomize_password && RANDOMIZE_PASSWORD
-    date '+%Y-%m-%d %H:%M (boot)' > /etc/norypt-ghost.last_wireless_rotate
+    date '+%Y-%m-%d %H:%M (boot)' > /tmp/norypt-ghost.last_wireless_rotate
 }
 
 stop() {
