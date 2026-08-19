@@ -62,6 +62,16 @@ _recovery_hint() {
     echo "norypt-ghost: or force RF on manually: gl_modem -B ${BUS} -U 1 AT 'AT+CFUN=1'" >&2
 }
 
+# Ephemeral old->new IMEI handoff for the on-screen masked display.
+# tmpfs only; the touch daemon renders then deletes it. Never on flash.
+# $1 = old IMEI slot1, $2 = old IMEI slot2 (optional), $3 = new IMEI slot1, $4 = new IMEI slot2 (optional)
+_emit_rotate_display() {
+    umask 077
+    { printf 'old %s\nnew %s\n' "$1" "$3"
+      [ -n "$2" ] && [ -n "$4" ] && printf 'old2 %s\nnew2 %s\n' "$2" "$4"
+    } > /tmp/norypt-ghost.rotate-display
+}
+
 # ── Modem AT helpers ─────────────────────────────────────────────────────────
 
 # Send one AT command via the active subscription channel.

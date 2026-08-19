@@ -219,6 +219,10 @@ _rotate_wireless() {
 _rotate() {
     local mode1="${1:-random}" mode2="${2:-random}" do_reboot="${3:-0}"
 
+    rm -f /tmp/norypt-ghost.rotate-display
+    local _rot_old1 _rot_old2
+    _rot_old1="$(READ_IMEI)"; _rot_old2="$(READ_IMEI_SLOT2)"
+
     echo "norypt-ghost: disabling RF before IMEI write..."
     MODEM_RF_DISABLE
 
@@ -247,8 +251,11 @@ _rotate() {
 
     date '+%Y-%m-%d %H:%M (manual)' > /etc/norypt-ghost.last_imei_rotate
 
-    echo "  Slot 1 IMEI confirmed: $(READ_IMEI)"
-    echo "  Slot 2 IMEI confirmed: $(READ_IMEI_SLOT2)"
+    local _rot_new1 _rot_new2
+    _rot_new1="$(READ_IMEI)"; _rot_new2="$(READ_IMEI_SLOT2)"
+    echo "  Slot 1 IMEI confirmed: $_rot_new1"
+    echo "  Slot 2 IMEI confirmed: $_rot_new2"
+    _emit_rotate_display "$_rot_old1" "$_rot_old2" "$_rot_new1" "$_rot_new2"
 
     if [ "$do_reboot" = "1" ]; then
         echo "norypt-ghost: rebooting in 3s to verify IMEI persistence..."
@@ -362,6 +369,8 @@ case "$cmd" in
         ;;
 
     new-identity)
+        rm -f /tmp/norypt-ghost.rotate-display
+        _ni_old1="$(READ_IMEI)"; _ni_old2="$(READ_IMEI_SLOT2)"
         echo "norypt-ghost: staging new device identity..."
         _screen_splash rotating
         _id="$(IDENTITY_STAGE)" || { echo "staging failed" >&2; _screen_fail; exit 1; }
@@ -371,6 +380,12 @@ case "$cmd" in
         if command -v _render_join_qr >/dev/null 2>&1; then
             _render_join_qr "$(uci -q get wireless.wifi2g.ssid)" "$(uci -q get wireless.wifi2g.key)"
         fi
+        _ni_new1=""; _ni_new2=""
+        if [ -f /etc/norypt-ghost.identity-pending ]; then
+            _ni_new1="$(sed -n 's/^STAGED_IMEI1=//p' /etc/norypt-ghost.identity-pending)"
+            _ni_new2="$(sed -n 's/^STAGED_IMEI2=//p' /etc/norypt-ghost.identity-pending)"
+        fi
+        _emit_rotate_display "$_ni_old1" "$_ni_old2" "$_ni_new1" "$_ni_new2"
         echo "norypt-ghost: rebooting in 5s to apply the new identity cleanly."
         echo "  Scan the QR on the device screen to rejoin Wi-Fi."
         sleep 5
