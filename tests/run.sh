@@ -32,9 +32,15 @@ else
     echo "== lua unit tests SKIPPED (no interpreter; runs in CI) =="
 fi
 echo "== C host tests =="
+fail=0
 for t in tests/c/test_*.c; do
     base="$(basename "$t" .c)"
-    gcc -Wall -Wextra -I src -o "/tmp/ng_$base" "$t" $(sed -n 's,^// LINK: ,,p' "$t") && "/tmp/ng_$base"
+    if gcc -Wall -Wextra -I src -o "/tmp/ng_$base" "$t" $(sed -n 's,^// LINK: ,,p' "$t"); then
+        "/tmp/ng_$base" || fail=1
+    else
+        fail=1
+    fi
 done
+[ "$fail" -eq 0 ] || { echo "C host tests FAILED"; exit 1; }
 
 echo "All host tests passed."
