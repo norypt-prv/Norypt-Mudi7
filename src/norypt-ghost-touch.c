@@ -79,13 +79,17 @@
 static const struct {
     const char *subcmd;
     const char *title;
+    const char *busy;   /* progress label; for takedown actions this is the
+                         * frame LEFT ON SCREEN as the device goes down, so it
+                         * must accurately name the action. Single line only —
+                         * screen_busy centers one line. */
     int takedown;
 } ACTIONS[NG_ITEM_COUNT] = {
-    [NG_NEW_IDENTITY]    = { "new-identity",    "New Identity (REBOOTS)", 1 },
-    [NG_SIM_SWAP]        = { "sim-swap",        "SIM Swap (POWERS OFF)",  1 },
-    [NG_ROTATE_IMEI]     = { "rotate",          "Rotate IMEIs",           0 },
-    [NG_ROTATE_WIRELESS] = { "rotate-wireless", "Rotate Wireless",        0 },
-    [NG_CANCEL]          = { NULL,              NULL,                     0 },
+    [NG_NEW_IDENTITY]    = { "new-identity",    "New Identity (REBOOTS)", "New identity...",  1 },
+    [NG_SIM_SWAP]        = { "sim-swap",        "SIM Swap (POWERS OFF)",  "SIM swap...",      1 },
+    [NG_ROTATE_IMEI]     = { "rotate",          "Rotate IMEIs",           "Rotating IMEIs...", 0 },
+    [NG_ROTATE_WIRELESS] = { "rotate-wireless", "Rotate Wireless",        "Rotating WiFi...", 0 },
+    [NG_CANCEL]          = { NULL,              NULL,                     NULL,               0 },
 };
 
 enum { ST_IDLE, ST_MENU, ST_CONFIRM };
@@ -154,7 +158,7 @@ static int read_handoff(char *old, size_t old_sz, char *new, size_t new_sz)
  * "Rotating..." for the watch window and then close. */
 static void run_state(fb_t *fb, int item)
 {
-    screen_busy(fb, "Rotating...");
+    screen_busy(fb, ACTIONS[item].busy);
     run_action(ACTIONS[item].subcmd);
 
     char old[64], new[64];
@@ -342,7 +346,12 @@ int main(void)
         pending = -1;
     }
 
-    fbdev_close(&fb, 1);
+    /* Restore gl_screen only if the framebuffer is still ours (a genuine
+     * in-menu graceful exit). After a takedown action run_state() already did
+     * fbdev_close(&fb, 0) — leaving the last frame up and gl_screen down — and
+     * NULLed fb.px; guarding on fb.px keeps a post-takedown EOF exit from
+     * repainting the stock UI over that frame. (NULL px is a safe no-op close.) */
+    fbdev_close(&fb, fb.px != NULL);
     close(fd);
     closelog();
     return 0;
