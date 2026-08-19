@@ -59,9 +59,12 @@
 #define HOLD_MS            2000   /* clock hold required to open the menu    */
 #define COOLDOWN_SECS      10     /* min gap between menu opens              */
 #define IDLE_TIMEOUT_MS    15000  /* auto-cancel MENU/CONFIRM after silence  */
-#define RUNNING_WATCH_MS   4000   /* watch for the IMEI handoff file         */
-#define RUNNING_POLL_MS    200    /* handoff poll granularity                */
-#define IMEI_HOLD_MS       4000   /* keep the masked-IMEI frame on screen    */
+#define HANDOFF_WATCH_MS   30000  /* watch for the IMEI handoff file — must    *
+                                   * cover the full IDENTITY_STAGE (profile    *
+                                   * pick + two Lua IMEI gens + UCI writes)    */
+#define RUNNING_POLL_MS    200    /* handoff poll granularity                 */
+#define BUSY_HOLD_MS       1500   /* busy label for no-handoff actions        */
+#define IMEI_HOLD_MS       4000   /* keep the masked-IMEI frame on screen     */
 
 /* Clock region (top-left status bar) in TOUCH coordinates — confirmed via live
  * evdev capture, tap at X=28 Y=15. This is the menu-open gesture and is NOT run
@@ -75,7 +78,10 @@
  * subcmd  — argv[1] passed to the norypt-ghost CLI (NULL for Cancel).
  * title   — confirm-screen heading.
  * takedown — 1 if the action takes the device down (reboot/poweroff): leave the
- *            last frame up and do NOT restart gl_screen. 0 = live, restart it. */
+ *            last frame up and do NOT restart gl_screen. 0 = live, restart it.
+ * emits_handoff — 1 if the action writes the masked old/new IMEI handoff file
+ *            (new-identity, rotate). Only these enter the handoff-watch loop;
+ *            the others just show the busy label briefly and close. */
 static const struct {
     const char *subcmd;
     const char *title;
@@ -84,12 +90,13 @@ static const struct {
                          * must accurately name the action. Single line only —
                          * screen_busy centers one line. */
     int takedown;
+    int emits_handoff;
 } ACTIONS[NG_ITEM_COUNT] = {
-    [NG_NEW_IDENTITY]    = { "new-identity",    "New Identity (REBOOTS)", "New identity...",  1 },
-    [NG_SIM_SWAP]        = { "sim-swap",        "SIM Swap (POWERS OFF)",  "SIM swap...",      1 },
-    [NG_ROTATE_IMEI]     = { "rotate",          "Rotate IMEIs",           "Rotating IMEIs...", 0 },
-    [NG_ROTATE_WIRELESS] = { "rotate-wireless", "Rotate Wireless",        "Rotating WiFi...", 0 },
-    [NG_CANCEL]          = { NULL,              NULL,                     NULL,               0 },
+    [NG_NEW_IDENTITY]    = { "new-identity",    "New Identity (REBOOTS)", "New identity...",  1, 1 },
+    [NG_SIM_SWAP]        = { "sim-swap",        "SIM Swap (POWERS OFF)",  "SIM swap...",      1, 0 },
+    [NG_ROTATE_IMEI]     = { "rotate",          "Rotate IMEIs",           "Rotating IMEIs...", 0, 1 },
+    [NG_ROTATE_WIRELESS] = { "rotate-wireless", "Rotate Wireless",        "Rotating WiFi...", 0, 0 },
+    [NG_CANCEL]          = { NULL,              NULL,                     NULL,               0, 0 },
 };
 
 enum { ST_IDLE, ST_MENU, ST_CONFIRM };
@@ -152,30 +159,37 @@ static int read_handoff(char *old, size_t old_sz, char *new, size_t new_sz)
     return old[0] && new[0];
 }
 
-/* RUNNING state: show progress, watch a few seconds for the masked-IMEI handoff
- * file, render it if it appears, then hand the framebuffer back per action
- * class. Only new-identity and rotate emit the handoff; the others just show
- * "Rotating..." for the watch window and then close. */
+/* RUNNING state: show progress, then hand the framebuffer back per action
+ * class. Only actions that emit the masked-IMEI handoff (new-identity, rotate)
+ * enter the watch loop — new-identity emits it only after IDENTITY_STAGE
+ * (profile pick + two Lua IMEI gens + UCI writes), which can take much longer
+ * than a few seconds, so the window is generous (HANDOFF_WATCH_MS). Non-handoff
+ * actions would only block pointlessly in that loop, so they just hold the busy
+ * label briefly and close. */
 static void run_state(fb_t *fb, int item)
 {
     screen_busy(fb, ACTIONS[item].busy);
     run_action(ACTIONS[item].subcmd);
 
-    char old[64], new[64];
-    int shown = 0;
-    for (int waited = 0; waited < RUNNING_WATCH_MS; waited += RUNNING_POLL_MS) {
-        if (access(DISPLAY_FILE, F_OK) == 0 &&
-            read_handoff(old, sizeof(old), new, sizeof(new))) {
-            screen_imei(fb, old, new);
-            unlink(DISPLAY_FILE);
-            shown = 1;
-            break;
+    if (ACTIONS[item].emits_handoff) {
+        char old[64], new[64];
+        int shown = 0;
+        for (int waited = 0; waited < HANDOFF_WATCH_MS; waited += RUNNING_POLL_MS) {
+            if (access(DISPLAY_FILE, F_OK) == 0 &&
+                read_handoff(old, sizeof(old), new, sizeof(new))) {
+                screen_imei(fb, old, new);
+                unlink(DISPLAY_FILE);
+                shown = 1;
+                break;
+            }
+            sleep_ms(RUNNING_POLL_MS);
         }
-        sleep_ms(RUNNING_POLL_MS);
+        if (shown)
+            sleep_ms(IMEI_HOLD_MS);  /* hold the masked IMEIs on screen */
+    } else {
+        /* No handoff to wait for — just show the busy label briefly. */
+        sleep_ms(BUSY_HOLD_MS);
     }
-
-    if (shown)
-        sleep_ms(IMEI_HOLD_MS);  /* hold the masked IMEIs on screen */
 
     if (ACTIONS[item].takedown) {
         /* Reboot / poweroff: leave the last frame up, do NOT restart gl_screen.
@@ -291,6 +305,9 @@ int main(void)
 
             if (in_zone && held && cooled && idle) {
                 if (fbdev_open(&fb) != 0) {
+                    /* Arm the cooldown even on failure so repeated failing
+                     * long-presses can't spam the evict/restart cycle. */
+                    last_open = now;
                     syslog(LOG_ERR, "fbdev_open failed — staying idle");
                     continue;
                 }

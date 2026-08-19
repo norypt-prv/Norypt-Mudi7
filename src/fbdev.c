@@ -43,6 +43,16 @@ static void wait_for_gl_screen_exit(void)
     }
 }
 
+/* Restarts gl_screen (the stock touchscreen UI). Shared by fbdev_close and by
+ * fbdev_open's failure paths: once eviction has run, any subsequent open error
+ * must hand the framebuffer back so a failed open leaves gl_screen running as
+ * it found it, rather than dead until reboot. */
+static void restart_gl_screen(void)
+{
+    if (system("/etc/init.d/gl_screen start >/dev/null 2>&1") == -1)
+        syslog(LOG_WARNING, "fbdev: exec of gl_screen init.d start failed: %s", strerror(errno));
+}
+
 /* Evicts gl_screen so nothing else writes to /dev/fb0 while the menu owns
  * it. Mirrors functions.sh:_screen_splash: procd service delete, init.d
  * stop, pkill -9, then wait for exit. system() failures (couldn't even
@@ -75,12 +85,14 @@ int fbdev_open(fb_t *out)
     fd = open(FB_DEVICE, O_RDWR);
     if (fd < 0) {
         syslog(LOG_ERR, "fbdev: open(%s) failed: %s", FB_DEVICE, strerror(errno));
+        restart_gl_screen();
         return -1;
     }
 
     if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) != 0) {
         syslog(LOG_ERR, "fbdev: FBIOGET_VSCREENINFO failed: %s", strerror(errno));
         close(fd);
+        restart_gl_screen();
         return -1;
     }
 
@@ -90,6 +102,7 @@ int fbdev_open(fb_t *out)
                vinfo.xres, vinfo.yres, vinfo.bits_per_pixel,
                FB_EXPECT_W, FB_EXPECT_H, FB_EXPECT_BPP);
         close(fd);
+        restart_gl_screen();
         return -1;
     }
 
@@ -98,6 +111,7 @@ int fbdev_open(fb_t *out)
     if (map == MAP_FAILED) {
         syslog(LOG_ERR, "fbdev: mmap(%zu bytes) failed: %s", map_size, strerror(errno));
         close(fd);
+        restart_gl_screen();
         return -1;
     }
 
@@ -123,8 +137,6 @@ void fbdev_close(fb_t *fb, int restore_gl)
         fb->h = 0;
     }
 
-    if (restore_gl) {
-        if (system("/etc/init.d/gl_screen start >/dev/null 2>&1") == -1)
-            syslog(LOG_WARNING, "fbdev: exec of gl_screen init.d start failed: %s", strerror(errno));
-    }
+    if (restore_gl)
+        restart_gl_screen();
 }
