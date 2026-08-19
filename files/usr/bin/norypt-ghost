@@ -334,7 +334,15 @@ done
 
 case "$cmd" in
     install)
-        _save_factory_state
+        # No-retention model: no factory capture. Setup only.
+        uci -q get norypt-ghost.options >/dev/null 2>&1 || {
+            uci -c /etc/config set norypt-ghost.options=norypt-ghost
+        }
+        # Identity changes on demand only — never per boot.
+        uci -c /etc/config set norypt-ghost.options.randomize_on_boot=0
+        uci -c /etc/config commit norypt-ghost
+        echo "norypt-ghost: setup complete (no-retention model)."
+        echo "  Change identity on demand: norypt-ghost new-identity  (or the on-screen menu)."
         ;;
 
     status)
