@@ -13,14 +13,19 @@
 set -e
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="${REPO}/src/norypt-ghost-touch.c"
 OUT="${REPO}/files/usr/bin/norypt-ghost-touch"
+
+# The daemon is now multi-file: the state machine plus the fb/menu/screens/imei/
+# fbdev modules it builds on. Keep this list in sync with the Makefile and
+# sdk-build.yml compile inputs.
+SRCS="$REPO/src/norypt-ghost-touch.c $REPO/src/fb.c $REPO/src/menu.c $REPO/src/screens.c $REPO/src/imei.c $REPO/src/fbdev.c"
 
 mkdir -p "$(dirname "$OUT")"
 
 if command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
     echo "==> Building with aarch64-linux-gnu-gcc"
-    aarch64-linux-gnu-gcc -O2 -s -static -o "$OUT" "$SRC"
+    # shellcheck disable=SC2086
+    aarch64-linux-gnu-gcc -O2 -s -static -I "$REPO/src" -o "$OUT" $SRCS
 
 elif command -v docker >/dev/null 2>&1; then
     echo "==> Building with Docker (alpine/musl, linux/arm64)"
@@ -28,7 +33,9 @@ elif command -v docker >/dev/null 2>&1; then
         -v "${REPO}/src:/src:ro" -v "$(dirname "$OUT"):/out" \
         alpine:3.20 \
         sh -c 'apk add --no-cache gcc musl-dev linux-headers >/dev/null && \
-               gcc -O2 -s -static -o /out/norypt-ghost-touch /src/norypt-ghost-touch.c'
+               gcc -O2 -s -static -I /src -o /out/norypt-ghost-touch \
+                   /src/norypt-ghost-touch.c /src/fb.c /src/menu.c \
+                   /src/screens.c /src/imei.c /src/fbdev.c'
 
 else
     cat >&2 <<'EOF'

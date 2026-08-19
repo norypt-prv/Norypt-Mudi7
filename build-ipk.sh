@@ -23,9 +23,16 @@ for _tool in ar tar install file; do
 done
 
 # The touch daemon is a build artifact, never committed — build it on demand
-# from src/ so the shipped binary can never drift from the source.
+# from src/ so the shipped binary can never drift from the source. The daemon
+# is multi-file, so rebuild whenever ANY src/ source or header is newer than
+# the binary, not just the top-level norypt-ghost-touch.c.
 TOUCH_BIN="$REPO/files/usr/bin/norypt-ghost-touch"
-if [ ! -f "$TOUCH_BIN" ] || [ "$REPO/src/norypt-ghost-touch.c" -nt "$TOUCH_BIN" ]; then
+_touch_stale=0
+[ -f "$TOUCH_BIN" ] || _touch_stale=1
+if [ "$_touch_stale" = 0 ] && [ -n "$(find "$REPO/src" -name '*.c' -o -name '*.h' -newer "$TOUCH_BIN" 2>/dev/null)" ]; then
+    _touch_stale=1
+fi
+if [ "$_touch_stale" = 1 ]; then
     echo "==> Touch daemon missing or out of date — building from src/"
     "$REPO/tools/build-touch.sh"
 fi

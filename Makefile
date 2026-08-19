@@ -33,11 +33,19 @@ define Build/Configure
 endef
 
 # Compile the norypt-ghost-touch evdev daemon for the target arch (statically
-# linked, matching the prebuilt binary build-ipk.sh bundles).
+# linked, matching the prebuilt binary build-ipk.sh bundles). The daemon is
+# multi-file: the state machine plus the fb/menu/screens/imei/fbdev modules.
+# Keep this source list in sync with tools/build-touch.sh and sdk-build.yml.
 define Build/Compile
 	$(TARGET_CC) $(TARGET_CFLAGS) $(TARGET_LDFLAGS) -O2 -static \
+		-I $(PKG_BUILD_DIR) \
 		-o $(PKG_BUILD_DIR)/norypt-ghost-touch \
-		$(PKG_BUILD_DIR)/norypt-ghost-touch.c
+		$(PKG_BUILD_DIR)/norypt-ghost-touch.c \
+		$(PKG_BUILD_DIR)/fb.c \
+		$(PKG_BUILD_DIR)/menu.c \
+		$(PKG_BUILD_DIR)/screens.c \
+		$(PKG_BUILD_DIR)/imei.c \
+		$(PKG_BUILD_DIR)/fbdev.c
 endef
 
 define Package/norypt-ghost/install

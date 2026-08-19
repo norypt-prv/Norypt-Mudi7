@@ -1,6 +1,10 @@
-# Builds the package with the official OpenWrt SDK — compiles norypt-ghost-touch
-# from src/ against the exact target toolchain and musl ABI, rather than the
-# generic aarch64 cross-compiler build.yml uses. Both IPKs are attached to
+# Builds the package with the official OpenWrt SDK — compiles the multi-file
+# norypt-ghost-touch daemon (norypt-ghost-touch.c + fb.c menu.c screens.c
+# imei.c fbdev.c, with their headers) from src/ against the exact target
+# toolchain and musl ABI, rather than the generic aarch64 cross-compiler
+# build.yml uses. The source list itself lives in the Makefile's Build/Compile
+# rule (Build/Prepare stages all of src/ into the build dir); this workflow
+# just drives `make package/norypt-ghost/compile`. Both IPKs are attached to
 # releases; this one is the reproducible, toolchain-exact build.
 #
 # SDK: 23.05.4 ipq807x/generic — the same OpenWrt release the GL-E5800
