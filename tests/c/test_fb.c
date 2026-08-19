@@ -72,5 +72,16 @@ int main(void) {
     assert(col0_any == 1);
     assert(col1_any == 1);
 
+    /* negative-origin clipping: a rect starting off the top-left must clip to the
+     * visible region, never wrap or write out of bounds */
+    for (int i = 0; i < 240*320; i++) buf[i] = 0;
+    fb_fill_rect(&fb, -5, -5, 10, 10, red);   /* visible part is pixels (0..4, 0..4) */
+    assert(buf[0] == red);                      /* (0,0) inside the clipped rect */
+    assert(buf[4*240 + 4] == red);              /* (4,4) inside */
+    assert(buf[5*240 + 5] == 0);                /* (5,5) outside */
+    /* a fully off-screen rect must touch nothing (buf[0] stays as it was) */
+    fb_fill_rect(&fb, -100, -100, 50, 50, red);
+    assert(buf[0] == red);
+
     return 0;
 }

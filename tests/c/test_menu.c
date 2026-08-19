@@ -17,5 +17,24 @@ int main(void) {
     assert(menu_hit_test(items, NG_ITEM_COUNT, cx, cy) == NG_NEW_IDENTITY);
     /* a tap in the title band hits nothing */
     assert(menu_hit_test(items, NG_ITEM_COUNT, 5, 5) == -1);
+    /* the Cancel (last) button center hits Cancel */
+    int qx = items[NG_CANCEL].x + items[NG_CANCEL].w/2,
+        qy = items[NG_CANCEL].y + items[NG_CANCEL].h/2;
+    assert(menu_hit_test(items, NG_ITEM_COUNT, qx, qy) == NG_CANCEL);
+    /* the gap between button 0 and button 1 (first row after button 0) hits nothing */
+    assert(menu_hit_test(items, NG_ITEM_COUNT, items[0].x + 5,
+                         items[0].y + items[0].h) == -1);
+    /* off-screen negative coords hit nothing */
+    assert(menu_hit_test(items, NG_ITEM_COUNT, -1, -1) == -1);
+
+    /* menu_render actually paints the buttons, and highlighting one visibly
+     * changes its pixels vs. the un-highlighted render */
+    static uint16_t buf[240*320];
+    fb_t fb = { buf, 240, 320 };
+    int bx = items[0].x + 4, by = items[0].y + 4;
+    menu_render(&fb, items, NG_ITEM_COUNT, -1);   /* nothing highlighted */
+    uint16_t unhi = buf[by*240 + bx];
+    menu_render(&fb, items, NG_ITEM_COUNT, 0);    /* highlight item 0 */
+    assert(buf[by*240 + bx] != unhi);
     return 0;
 }

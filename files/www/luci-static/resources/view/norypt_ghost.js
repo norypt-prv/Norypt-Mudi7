@@ -386,11 +386,8 @@ return view.extend({
             // ── Rotation Options ──────────────────────────────────────────────
             section('Rotation Options', [
                 E('div', { 'style': 'font-size:.85em;font-weight:600;color:var(--text-color-high);border-bottom:1px solid var(--border-color-high);padding-bottom:3px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between' }, [ 'Wireless / System Rotation', wirelessSavedEl ]),
-                E('div', { 'style': 'margin-bottom:4px' }, [
-                    checkbox('Randomize identity on boot', 'randomize_on_boot', st.opt_boot !== '0')
-                ]),
-                E('div', { 'style': 'color:var(--text-color-medium);font-size:.82em;margin-bottom:8px;padding-left:1.5em' }, [
-                    'Note: when unchecked, the options below will not rotate at boot.'
+                E('div', { 'style': 'color:var(--text-color-medium);font-size:.82em;margin-bottom:8px' }, [
+                    'Which identifiers a Wireless / System rotation changes (New Identity / Rotate Wireless):'
                 ]),
                 E('div', { 'style': 'margin-bottom:12px;padding-left:1.25em;display:flex;flex-direction:column;gap:2px' }, [
                     checkbox('Rotate BSSIDs / MACs',    'randomize_mac',      st.opt_mac      !== '0'),
