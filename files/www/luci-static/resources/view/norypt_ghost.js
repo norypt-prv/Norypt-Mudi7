@@ -92,16 +92,6 @@ return view.extend({
             });
         }
 
-        function handleRestore() {
-            if (!window.confirm('Restore all factory values?\nThis will reveal your real device identity.'))
-                return;
-            startCountdown('Restore started.', 150);
-            exec('restore').catch(function(e) {
-                if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-                showNotice('Error: ' + e.message, true);
-            });
-        }
-
         function handleSimSwap() {
             if (!window.confirm('Start SIM swap?\n\nThis writes throwaway IMEIs and POWERS OFF the device in about 5 seconds.'))
                 return;
@@ -131,33 +121,25 @@ return view.extend({
         function tableHead() {
             return E('thead', {}, [ E('tr', {}, [
                 E('th', { 'style': 'width:220px;padding:6px 8px;text-align:left' }, []),
-                E('th', { 'style': 'padding:6px 8px;text-align:left;font-weight:600;border-bottom:2px solid var(--border-color-high)' }, [ 'Current' ]),
-                E('th', { 'style': 'padding:6px 8px;text-align:left;font-weight:600;color:var(--text-color-medium);border-bottom:2px solid var(--border-color-high)' }, [ 'Factory' ])
+                E('th', { 'style': 'padding:6px 8px;text-align:left;font-weight:600;border-bottom:2px solid var(--border-color-high)' }, [ 'Current' ])
             ])]);
         }
 
         // cur can be a string or a pre-built Element (for async fields like IMSI)
-        function row(label, cur, fac) {
+        function row(label, cur) {
             var curStr = typeof cur === 'string' ? cur : null;
-            var isRotated = curStr && fac && fac !== '—' && curStr !== fac;
             return E('tr', {}, [
                 E('td', { 'style': 'width:220px;padding:6px 8px;font-weight:bold' }, [ label ]),
-                E('td', { 'style': 'padding:6px 8px;font-family:monospace' +
-                    (isRotated ? ';color:#1a7f3c;font-weight:bold' : '') },
-                    curStr !== null ? [ curStr || '—' ] : [ cur ]),
-                E('td', { 'style': 'padding:6px 8px;font-family:monospace;color:#888' },
-                    [ fac && fac !== '—' ? fac : '' ])
+                E('td', { 'style': 'padding:6px 8px;font-family:monospace' },
+                    curStr !== null ? [ curStr || '—' ] : [ cur ])
             ]);
         }
 
-        function passwordRow(label, cur, fac) {
-            var isRotated = fac && fac !== '—' && cur && cur !== fac;
+        function passwordRow(label, cur) {
             var hasCur = cur && cur !== '—';
-            var hasFac = fac && fac !== '—';
             var curMasked = hasCur ? '•'.repeat(cur.length) : '—';
             var curShowing = false;
-            var curEl = E('span', { 'style': 'font-family:monospace' +
-                (isRotated ? ';color:#1a7f3c;font-weight:bold' : '') }, [ curMasked ]);
+            var curEl = E('span', { 'style': 'font-family:monospace' }, [ curMasked ]);
             var curBtn = hasCur ? E('button', {
                 'class': 'btn', 'style': 'margin-left:8px;padding:1px 8px;font-size:.8em',
                 'click': function() {
@@ -166,21 +148,9 @@ return view.extend({
                     curBtn.textContent = curShowing ? 'Hide' : 'Show';
                 }
             }, [ 'Show' ]) : null;
-            var facMasked = hasFac ? '•'.repeat(fac.length) : '';
-            var facShowing = false;
-            var facEl = hasFac ? E('span', { 'style': 'font-family:monospace;color:#888' }, [ facMasked ]) : null;
-            var facBtn = hasFac ? E('button', {
-                'class': 'btn', 'style': 'margin-left:8px;padding:1px 8px;font-size:.8em',
-                'click': function() {
-                    facShowing = !facShowing;
-                    facEl.textContent = facShowing ? fac : facMasked;
-                    facBtn.textContent = facShowing ? 'Hide' : 'Show';
-                }
-            }, [ 'Show' ]) : null;
             return E('tr', {}, [
                 E('td', { 'style': 'width:220px;padding:6px 8px;font-weight:bold' }, [ label ]),
-                E('td', { 'style': 'padding:6px 8px' }, curBtn ? [ curEl, curBtn ] : [ curEl ]),
-                E('td', { 'style': 'padding:6px 8px' }, facEl ? (facBtn ? [ facEl, facBtn ] : [ facEl ]) : [ '' ])
+                E('td', { 'style': 'padding:6px 8px' }, curBtn ? [ curEl, curBtn ] : [ curEl ])
             ]);
         }
 
@@ -252,7 +222,6 @@ return view.extend({
 
         var mode1 = st.imei_mode_slot1 || 'random';
         var mode2 = st.imei_mode_slot2 || 'random';
-        var sealed = st.factory_sealed === '1';
 
         // ── Static IMEI inputs ────────────────────────────────────────────────
 
@@ -340,12 +309,6 @@ return view.extend({
             E('h2', {}, [ 'Norypt Ghost — Identity Randomization' ]),
             noticeEl,
 
-            !st.installed ? E('div', { 'class': 'alert-message error', 'style': 'margin-bottom:1em' }, [
-                'Factory state not captured — run ',
-                E('code', {}, [ 'norypt-ghost install' ]),
-                ' over SSH before using this page.'
-            ]) : E('span'),
-
             // ── New Identity (lead action) ───────────────────────────────────
             section('New Identity', [
                 E('div', { 'style': 'color:var(--text-color-medium);font-size:.9em;margin-bottom:10px;line-height:1.5' }, [
@@ -365,37 +328,34 @@ return view.extend({
                 E('table', { 'style': 'width:100%;border-collapse:collapse' }, [
                     E('thead', {}, [ E('tr', {}, [
                         E('th', { 'style': 'width:60px;padding:4px 8px;text-align:left' }, []),
-                        E('th', { 'style': 'padding:4px 8px;text-align:left;font-weight:600;border-bottom:2px solid var(--border-color-high)' }, [ 'Current' ]),
-                        E('th', { 'style': 'padding:4px 8px;text-align:left;font-weight:600;color:var(--text-color-medium);border-bottom:2px solid var(--border-color-high)' }, [ 'Factory' ])
+                        E('th', { 'style': 'padding:4px 8px;text-align:left;font-weight:600;border-bottom:2px solid var(--border-color-high)' }, [ 'Current' ])
                     ])]),
                     E('tbody', {}, [
-                        E('tr', {}, [ E('td', { 'colspan': '3', 'style': 'padding:6px 8px 2px;font-size:.82em;font-weight:700;color:var(--text-color-high)' }, [ 'SIM Slot 1' ]) ]),
+                        E('tr', {}, [ E('td', { 'colspan': '2', 'style': 'padding:6px 8px 2px;font-size:.82em;font-weight:700;color:var(--text-color-high)' }, [ 'SIM Slot 1' ]) ]),
                         E('tr', {}, [
                             E('td', { 'style': 'padding:1px 8px;color:var(--text-color-medium);font-size:.82em' }, [ 'IMEI' ]),
-                            E('td', { 'style': 'padding:1px 8px;font-family:monospace' + (st.imei1 && st.factory_i1 && st.factory_i1 !== '---' && st.imei1 !== st.factory_i1 ? ';color:#1a7f3c;font-weight:bold' : '') }, [ st.imei1 || '—' ]),
-                            E('td', { 'style': 'padding:1px 8px;font-family:monospace;color:var(--text-color-medium)' }, [ st.factory_i1 && st.factory_i1 !== '---' ? st.factory_i1 : '' ])
+                            E('td', { 'style': 'padding:1px 8px;font-family:monospace' }, [ st.imei1 || '—' ])
                         ]),
                         E('tr', {}, [
                             E('td', { 'style': 'padding:1px 8px;color:var(--text-color-medium);font-size:.82em' }, [ 'IMSI' ]),
-                            E('td', { 'style': 'padding:1px 8px;font-family:monospace', 'colspan': '2' }, [ imsi1El ])
+                            E('td', { 'style': 'padding:1px 8px;font-family:monospace' }, [ imsi1El ])
                         ]),
                         E('tr', {}, [
                             E('td', { 'style': 'padding:1px 8px 8px;color:var(--text-color-medium);font-size:.82em' }, [ 'Network' ]),
-                            E('td', { 'style': 'padding:1px 8px 8px', 'colspan': '2' }, [ net1El ])
+                            E('td', { 'style': 'padding:1px 8px 8px' }, [ net1El ])
                         ]),
-                        E('tr', {}, [ E('td', { 'colspan': '3', 'style': 'padding:8px 8px 2px;font-size:.82em;font-weight:700;color:var(--text-color-high);border-top:1px solid var(--border-color-high)' }, [ 'SIM Slot 2 / eSIM' ]) ]),
+                        E('tr', {}, [ E('td', { 'colspan': '2', 'style': 'padding:8px 8px 2px;font-size:.82em;font-weight:700;color:var(--text-color-high);border-top:1px solid var(--border-color-high)' }, [ 'SIM Slot 2 / eSIM' ]) ]),
                         E('tr', {}, [
                             E('td', { 'style': 'padding:1px 8px;color:var(--text-color-medium);font-size:.82em' }, [ 'IMEI' ]),
-                            E('td', { 'style': 'padding:1px 8px;font-family:monospace' + (st.imei2 && st.factory_i2 && st.factory_i2 !== '---' && st.imei2 !== st.factory_i2 ? ';color:#1a7f3c;font-weight:bold' : '') }, [ st.imei2 || '—' ]),
-                            E('td', { 'style': 'padding:1px 8px;font-family:monospace;color:var(--text-color-medium)' }, [ st.factory_i2 && st.factory_i2 !== '---' ? st.factory_i2 : '' ])
+                            E('td', { 'style': 'padding:1px 8px;font-family:monospace' }, [ st.imei2 || '—' ])
                         ]),
                         E('tr', {}, [
                             E('td', { 'style': 'padding:1px 8px;color:var(--text-color-medium);font-size:.82em' }, [ 'IMSI' ]),
-                            E('td', { 'style': 'padding:1px 8px;font-family:monospace', 'colspan': '2' }, [ imsi2El ])
+                            E('td', { 'style': 'padding:1px 8px;font-family:monospace' }, [ imsi2El ])
                         ]),
                         E('tr', {}, [
                             E('td', { 'style': 'padding:1px 8px 6px;color:var(--text-color-medium);font-size:.82em' }, [ 'Network' ]),
-                            E('td', { 'style': 'padding:1px 8px 6px', 'colspan': '2' }, [ net2El ])
+                            E('td', { 'style': 'padding:1px 8px 6px' }, [ net2El ])
                         ])
                     ])
                 ]),
@@ -407,18 +367,18 @@ return view.extend({
                 E('table', { 'style': 'width:100%;border-collapse:collapse' }, [
                     tableHead(),
                     E('tbody', {}, [
-                        row('SSID', st.ssid, st.factory_ssid),
-                        row('Guest SSID', st.guest_ssid, st.factory_guest_ssid),
-                        row('2.4 GHz BSSID', st.mac_2g, st.factory_mac_2g),
-                        row('5 GHz BSSID', st.mac_5g, st.factory_mac_5g),
-                        row('6 GHz BSSID', st.mac_6g, st.factory_mac_6g),
-                        row('Station MAC (Repeater)', st.mac_sta, st.factory_mac_sta),
-                        row('2.4 GHz Guest BSSID', st.mac_guest2g, st.factory_mac_guest2g),
-                        row('5 GHz Guest BSSID', st.mac_guest5g, st.factory_mac_guest5g),
-                        row('6 GHz Guest BSSID', st.mac_guest6g, st.factory_mac_guest6g),
-                        row('Hostname', st.hostname, st.factory_host),
-                        passwordRow('Main WiFi Password', st.wifi2g_key, st.factory_wifi2g_key),
-                        passwordRow('Guest WiFi Password', st.guest2g_key, st.factory_guest2g_key)
+                        row('SSID', st.ssid),
+                        row('Guest SSID', st.guest_ssid),
+                        row('2.4 GHz BSSID', st.mac_2g),
+                        row('5 GHz BSSID', st.mac_5g),
+                        row('6 GHz BSSID', st.mac_6g),
+                        row('Station MAC (Repeater)', st.mac_sta),
+                        row('2.4 GHz Guest BSSID', st.mac_guest2g),
+                        row('5 GHz Guest BSSID', st.mac_guest5g),
+                        row('6 GHz Guest BSSID', st.mac_guest6g),
+                        row('Hostname', st.hostname),
+                        passwordRow('Main WiFi Password', st.wifi2g_key),
+                        passwordRow('Guest WiFi Password', st.guest2g_key)
                     ])
                 ])
             ]),
@@ -473,7 +433,7 @@ return view.extend({
                         return inp;
                     })(),
                     E('span', { 'style': 'color:var(--text-color-medium);font-size:.82em;margin-left:8px' },
-                        [ 'How long rotate/restore waits for re-registration before showing the warning screen.' ])
+                        [ 'How long rotation waits for re-registration before showing the warning screen.' ])
                 ]),
                 E('div', { 'style': 'font-size:.85em;font-weight:600;color:var(--text-color-high);border-bottom:1px solid var(--border-color-high);padding-bottom:3px;margin-bottom:8px;margin-top:12px;display:flex;align-items:center;justify-content:space-between' }, [ 'Touchscreen Trigger', touchSavedEl ]),
                 E('div', { 'style': 'margin-bottom:4px' }, [
@@ -514,32 +474,7 @@ return view.extend({
                     E('span', { 'style': 'color:var(--text-color-medium);font-size:.82em;margin-left:8px' }, [
                         'Regional preset used when deriving profile-based identity values.'
                     ])
-                ]),
-
-                E('div', { 'style': 'font-size:.85em;font-weight:600;color:var(--text-color-high);border-bottom:1px solid var(--border-color-high);padding-bottom:3px;margin-bottom:8px' }, [ 'Factory-Seal Mode' ]),
-                sealed ? E('div', { 'style': 'margin-bottom:4px' }, [
-                    E('span', { 'style': 'font-weight:bold;color:#1a7f3c' }, [ 'Sealed' ]),
-                    E('span', { 'style': 'color:var(--text-color-medium);font-size:.85em;margin-left:8px' },
-                        [ '— original identity is passphrase-encrypted and already set. Not changeable from LuCI; unseal with ' ]),
-                    E('code', {}, [ 'norypt-ghost restore' ]),
-                    E('span', { 'style': 'color:var(--text-color-medium);font-size:.85em' }, [ ' over SSH.' ])
-                ]) : (function() {
-                    var rSealed = E('input', { 'type': 'radio', 'name': 'factory_mode_radio', 'value': 'sealed', 'style': 'margin-right:4px' });
-                    var rPlain  = E('input', { 'type': 'radio', 'name': 'factory_mode_radio', 'value': 'plain',  'style': 'margin-right:4px' });
-                    rSealed.checked = st.factory_mode !== 'plain';
-                    rPlain.checked  = st.factory_mode === 'plain';
-                    function saveFactoryMode(val) {
-                        fs.exec(cmd, [ 'set:factory_mode=' + val ])
-                            .then(function() { flashSaved(securitySavedEl); })
-                            .catch(function(e) { console.error('set option failed:', e.message); });
-                    }
-                    rSealed.addEventListener('change', function() { if (rSealed.checked) saveFactoryMode('sealed'); });
-                    rPlain.addEventListener('change', function() { if (rPlain.checked) saveFactoryMode('plain'); });
-                    return E('div', { 'style': 'display:flex;align-items:center;gap:16px' }, [
-                        E('label', { 'style': 'display:inline-flex;align-items:center;cursor:pointer' }, [ rSealed, 'Sealed' ]),
-                        E('label', { 'style': 'display:inline-flex;align-items:center;cursor:pointer' }, [ rPlain, 'Plain' ])
-                    ]);
-                })()
+                ])
             ]),
 
             // ── Actions ───────────────────────────────────────────────────────
@@ -564,28 +499,14 @@ return view.extend({
                 ]),
                 E('dl', { 'style': 'margin:0 0 .75em;color:var(--text-color-medium);font-size:.9em;display:grid;grid-template-columns:auto 1fr;gap:2px 8px' }, [
                     E('dt', { 'style': 'font-weight:600;white-space:nowrap;color:var(--text-color-high)' }, [ 'SIM Swap' ]),
-                    E('dd', { 'style': 'margin:0' }, [ '— writes throwaway IMEIs and powers the device off; swap SIM(s) while off, final IMEIs are written on next boot.' ]),
-                    E('dt', { 'style': 'font-weight:600;white-space:nowrap;color:var(--text-color-high)' }, [ 'Restore Factory' ]),
-                    E('dd', { 'style': 'margin:0' }, [ '— returns all identity values to factory state.' ])
+                    E('dd', { 'style': 'margin:0' }, [ '— writes throwaway IMEIs and powers the device off; swap SIM(s) while off, final IMEIs are written on next boot.' ])
                 ]),
                 E('div', {}, [
                     E('button', {
                         'class': 'btn cbi-button-remove', 'style': 'margin-right:8px',
                         'click': handleSimSwap
-                    }, [ 'SIM Swap (powers off)' ]),
-                    sealed ? E('button', {
-                        'class': 'btn cbi-button-reset', 'disabled': 'disabled',
-                        'title': 'Sealed device — run "norypt-ghost restore" over SSH to restore the original identity.'
-                    }, [ 'Restore Factory' ]) : E('button', {
-                        'class': 'btn cbi-button-reset',
-                        'click': handleRestore
-                    }, [ 'Restore Factory' ])
+                    }, [ 'SIM Swap (powers off)' ])
                 ]),
-                sealed ? E('div', { 'style': 'color:var(--text-color-medium);font-size:.82em;margin-top:6px' }, [
-                    'Sealed device — run ',
-                    E('code', {}, [ 'norypt-ghost restore' ]),
-                    ' over SSH to restore the original identity.'
-                ]) : E('span'),
                 E('div', {
                     'style': 'color:var(--text-color-medium);font-size:.9em;margin-top:.6em;line-height:1.7'
                 }, [

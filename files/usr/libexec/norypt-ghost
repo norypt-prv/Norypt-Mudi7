@@ -23,20 +23,6 @@ case "$1" in
         _host=$(uci -q get system.@system[0].hostname 2>/dev/null)
         _key=$(uci -q get wireless.wifi2g.key 2>/dev/null)
         _gkey=$(uci -q get wireless.guest2g.key 2>/dev/null)
-        _fi1=$(uci -q get norypt-ghost.factory.slot1_imei 2>/dev/null)
-        _fi2=$(uci -q get norypt-ghost.factory.slot2_imei 2>/dev/null)
-        _fssid=$(uci -q get norypt-ghost.factory.wifi2g_ssid 2>/dev/null)
-        _fgssid=$(uci -q get norypt-ghost.factory.guest_ssid 2>/dev/null)
-        _fhost=$(uci -q get norypt-ghost.factory.hostname 2>/dev/null)
-        _fmac2g=$(uci -q get norypt-ghost.factory.wifi2g_mac 2>/dev/null)
-        _fmac5g=$(uci -q get norypt-ghost.factory.wifi5g_mac 2>/dev/null)
-        _fmacsta=$(uci -q get norypt-ghost.factory.sta_mac 2>/dev/null)
-        _fmac6g=$(uci -q get norypt-ghost.factory.wifi6g_mac 2>/dev/null)
-        _fmacguest2g=$(uci -q get norypt-ghost.factory.guest2g_mac 2>/dev/null)
-        _fmacguest5g=$(uci -q get norypt-ghost.factory.guest5g_mac 2>/dev/null)
-        _fmacguest6g=$(uci -q get norypt-ghost.factory.guest6g_mac 2>/dev/null)
-        _fkey=$(uci -q get norypt-ghost.factory.wifi2g_key 2>/dev/null)
-        _fgkey=$(uci -q get norypt-ghost.factory.guest2g_key 2>/dev/null)
         _opt_mac=$(uci -q get norypt-ghost.options.randomize_mac 2>/dev/null)
         _opt_ssid=$(uci -q get norypt-ghost.options.randomize_ssid 2>/dev/null)
         _opt_host=$(uci -q get norypt-ghost.options.randomize_hostname 2>/dev/null)
@@ -48,37 +34,26 @@ case "$1" in
         _sst2=$(uci -q get norypt-ghost.options.static_imei_slot2 2>/dev/null)
         _reg_timeout=$(uci -q get norypt-ghost.options.register_timeout 2>/dev/null)
         _opt_rat_lock=$(uci -q get norypt-ghost.options.rat_lock 2>/dev/null)
-        _opt_factory_mode=$(uci -q get norypt-ghost.options.factory_mode 2>/dev/null)
         _opt_default_region=$(uci -q get norypt-ghost.options.default_region 2>/dev/null)
-        _factory_sealed=$(uci -q get norypt-ghost.factory.sealed 2>/dev/null)
         _last_imei_rotate=$(cat /etc/norypt-ghost.last_imei_rotate 2>/dev/null)
         _last_wireless_rotate=$(cat /etc/norypt-ghost.last_wireless_rotate 2>/dev/null)
-        _installed=$([ -n "$_fi1" ] && printf true || printf false)
         _touch_enabled=$([ -n "$(ls /etc/rc.d/S*norypt-ghost-touch 2>/dev/null)" ] && printf '1' || printf '0')
-        printf '{"imei1":"%s","imei2":"%s","ssid":"%s","guest_ssid":"%s","mac_2g":"%s","mac_5g":"%s","mac_6g":"%s","mac_sta":"%s","mac_guest2g":"%s","mac_guest5g":"%s","mac_guest6g":"%s","hostname":"%s","wifi2g_key":"%s","guest2g_key":"%s","factory_i1":"%s","factory_i2":"%s","factory_ssid":"%s","factory_guest_ssid":"%s","factory_host":"%s","factory_mac_2g":"%s","factory_mac_5g":"%s","factory_mac_6g":"%s","factory_mac_sta":"%s","factory_mac_guest2g":"%s","factory_mac_guest5g":"%s","factory_mac_guest6g":"%s","factory_wifi2g_key":"%s","factory_guest2g_key":"%s","opt_mac":"%s","opt_ssid":"%s","opt_hostname":"%s","opt_password":"%s","opt_boot":"%s","imei_mode_slot1":"%s","imei_mode_slot2":"%s","static_imei_slot1":"%s","static_imei_slot2":"%s","register_timeout":"%s","rat_lock":"%s","factory_mode":"%s","default_region":"%s","factory_sealed":"%s","last_imei_rotate":"%s","last_wireless_rotate":"%s","touch_enabled":"%s","installed":%s}\n' \
+        printf '{"imei1":"%s","imei2":"%s","ssid":"%s","guest_ssid":"%s","mac_2g":"%s","mac_5g":"%s","mac_6g":"%s","mac_sta":"%s","mac_guest2g":"%s","mac_guest5g":"%s","mac_guest6g":"%s","hostname":"%s","wifi2g_key":"%s","guest2g_key":"%s","opt_mac":"%s","opt_ssid":"%s","opt_hostname":"%s","opt_password":"%s","opt_boot":"%s","imei_mode_slot1":"%s","imei_mode_slot2":"%s","static_imei_slot1":"%s","static_imei_slot2":"%s","register_timeout":"%s","rat_lock":"%s","default_region":"%s","last_imei_rotate":"%s","last_wireless_rotate":"%s","touch_enabled":"%s"}\n' \
             "${_imei1:----}" "${_imei2:----}" \
             "$(_js "${_ssid:----}")" "$(_js "${_gssid:----}")" \
             "${_mac2g:----}" "${_mac5g:----}" "${_mac6g:----}" "${_macsta:----}" \
             "${_macguest2g:----}" "${_macguest5g:----}" "${_macguest6g:----}" \
             "$(_js "${_host:----}")" \
             "$(_js "${_key:----}")" "$(_js "${_gkey:----}")" \
-            "${_fi1:----}" "${_fi2:----}" \
-            "$(_js "${_fssid:----}")" "$(_js "${_fgssid:----}")" \
-            "$(_js "${_fhost:----}")" \
-            "${_fmac2g:----}" "${_fmac5g:----}" "${_fmac6g:----}" "${_fmacsta:----}" \
-            "${_fmacguest2g:----}" "${_fmacguest5g:----}" "${_fmacguest6g:----}" \
-            "$(_js "${_fkey:----}")" "$(_js "${_fgkey:----}")" \
             "${_opt_mac:-1}" "${_opt_ssid:-1}" "${_opt_host:-1}" "${_opt_pass:-1}" \
             "${_opt_boot:-1}" \
             "${_opt_mode1:-random}" "${_opt_mode2:-random}" \
             "$(_js "${_sst1}")" "$(_js "${_sst2}")" \
             "${_reg_timeout:-120}" \
-            "${_opt_rat_lock:-1}" "${_opt_factory_mode:-sealed}" "${_opt_default_region:-NA}" \
-            "${_factory_sealed:-0}" \
+            "${_opt_rat_lock:-1}" "${_opt_default_region:-NA}" \
             "$(_js "${_last_imei_rotate}")" \
             "$(_js "${_last_wireless_rotate}")" \
-            "$_touch_enabled" \
-            "$_installed"
+            "$_touch_enabled"
         ;;
     new_identity)
         # Full rotation (IMEIs + wireless/system + RAT/region) — the CLI
@@ -162,12 +137,6 @@ case "$1" in
                 case "$_val" in
                     0|1) ;;
                     *) printf '{"error":"value must be 0 or 1"}\n'; exit 1 ;;
-                esac
-                ;;
-            factory_mode)
-                case "$_val" in
-                    sealed|plain) ;;
-                    *) printf '{"error":"factory mode must be sealed or plain"}\n'; exit 1 ;;
                 esac
                 ;;
             default_region)
