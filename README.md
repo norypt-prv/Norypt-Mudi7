@@ -241,7 +241,7 @@ Hold the **clock in the top-left corner** for **2 seconds** to open the on-devic
 
 Pick an item, confirm on the follow-up screen, and the daemon runs it. For the IMEI-rotating actions (**New Identity**, **Rotate IMEIs**) the screen then shows the **masked old → new IMEI** so you can confirm the change at a glance before the frame is handed back (or the reboot proceeds).
 
-The `norypt-ghost-touch` daemon (a small statically linked C binary, source in `src/`) reads `/dev/input/event0` *without* grabbing it, so the stock `gl_screen` UI keeps working while the menu is closed. It owns the framebuffer only while the menu is on screen — evicting `gl_screen` on open and restarting it on close. Guards against accidents:
+The `norypt-ghost-touch` daemon (a small statically linked C binary, source in `src/`) reads `/dev/input/event0` *without* grabbing it, so the stock `gl_screen` UI keeps working while the menu is closed. It owns the framebuffer only while the menu is on screen, and hands it back seamlessly: on open it **freezes** `gl_screen` (`SIGSTOP`) and snapshots the current screen, draws the menu into the framebuffer, and on close **restores that snapshot and resumes** `gl_screen` (`SIGCONT`) — so the stock UI returns instantly and exactly as it was. It never kills or restarts the display service (an earlier approach that visibly disrupted the panel and the USB link on real hardware); freeze-and-restore keeps the device rock-steady. Menu text and the masked-IMEI readout are drawn by the daemon itself, from an embedded bitmap font — the device has no runtime text renderer. Guards against accidents:
 
 - 2-second hold required — quick taps are logged and ignored
 - 10-second cooldown between menu opens
@@ -377,6 +377,8 @@ If a *write* fails, Norypt Ghost deliberately leaves RF **off** rather than tran
 
 All three fall back to Random (with a warning) if their inputs are unavailable, so a rotation never fails on a missing IMSI or unset static value.
 
+The Random pool (`files/usr/share/norypt-ghost/tac_pool.json`) is **phone-only** — real Apple and Samsung smartphone TACs, no mobile-hotspot or modem TACs — so `rotate` and `sim-swap` produce a genuine phone IMEI just like `new-identity` does. (Note that `rotate` changes *only* the IMEIs: for a single coherent phone across IMEI **and** Wi-Fi/SSID/hostname together, use `new-identity`.)
+
 **Band matching matters.** Carriers can compare a reported IMEI's expected capabilities against the cell it connects on — a 4G-only TAC on a 5G NR cell is a contradiction, confirmed on real hardware to trigger ~10 Mbps throttling on at least one carrier. Every catalog profile records its band set for exactly this reason.
 
 ### SIM-swap flow
@@ -421,6 +423,7 @@ Applied by `norypt-ghost-clean` at **S9**, before any tracking daemon starts:
 - **`tmpfs` over every telemetry directory present** — `/etc/oui-tertf` (client-MAC tracker), `/var/lib/nlbwmon` (bandwidth monitor), `/etc/vnstat` and `/var/lib/vnstat` (traffic stats). Each daemon keeps writing, believing it's on flash; the data evaporates every reboot.
 - **dnsmasq** runs with `logqueries=0` and `cachelocal=0` — no per-client DNS query log, no persisted cache.
 - **DHCP leases forced to `/tmp`** if the firmware ever points `leasefile` at flash.
+- **Rotation timestamps stay in RAM.** The "last IMEI / wireless rotation" markers live in `/tmp`, never `/etc` — a persisted timestamp would be a forensic trace of *when* the identity last changed. The cleaner also sweeps any such file left on flash by an older build.
 
 The pre-existing on-flash client database is unlinked at first run. *(It is unlinked, not overwritten: the Mudi 7's overlay is ext4 on eMMC, whose flash translation layer remaps writes, so overwrite-in-place tools like `shred` are ineffective. The tmpfs mount is the real protection.)*
 
