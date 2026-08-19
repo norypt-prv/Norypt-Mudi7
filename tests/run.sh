@@ -31,4 +31,10 @@ if command -v lua5.1 >/dev/null 2>&1 || command -v lua >/dev/null 2>&1; then
 else
     echo "== lua unit tests SKIPPED (no interpreter; runs in CI) =="
 fi
+echo "== C host tests =="
+for t in tests/c/test_*.c; do
+    base="$(basename "$t" .c)"
+    gcc -Wall -Wextra -I src -o "/tmp/ng_$base" "$t" $(sed -n 's,^// LINK: ,,p' "$t") && "/tmp/ng_$base"
+done
+
 echo "All host tests passed."
