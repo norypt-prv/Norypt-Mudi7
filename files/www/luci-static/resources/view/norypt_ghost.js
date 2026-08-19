@@ -437,10 +437,10 @@ return view.extend({
                 ]),
                 E('div', { 'style': 'font-size:.85em;font-weight:600;color:var(--text-color-high);border-bottom:1px solid var(--border-color-high);padding-bottom:3px;margin-bottom:8px;margin-top:12px;display:flex;align-items:center;justify-content:space-between' }, [ 'Touchscreen Trigger', touchSavedEl ]),
                 E('div', { 'style': 'margin-bottom:4px' }, [
-                    checkbox('Enable clock long-press to trigger SIM swap', 'touch_enabled', st.touch_enabled === '1', touchSavedEl)
+                    checkbox('Enable clock long-press to open the on-device menu', 'touch_enabled', st.touch_enabled === '1', touchSavedEl)
                 ]),
                 E('div', { 'style': 'color:var(--text-color-medium);font-size:.82em;padding-left:1.5em' }, [
-                    'Hold the clock (top-left of screen) for 2 seconds to initiate a SIM swap.'
+                    'Hold the clock (top-left of screen) for 2 seconds to open the on-device menu (New Identity, SIM Swap, Rotate IMEIs, Rotate Wireless, Cancel).'
                 ])
             ]),
 
