@@ -39,8 +39,8 @@ _screen_splash() {
 }
 
 # Restart gl_screen so the normal touchscreen UI returns.
-# Only call from user-triggered operations (rotate, restore) — boot scripts
-# should not call this; S80 starts gl_screen automatically.
+# Only call from user-triggered operations (rotate, new-identity) — boot
+# scripts should not call this; S80 starts gl_screen automatically.
 _screen_restore_display() {
     /etc/init.d/gl_screen start >/dev/null 2>&1
 }
@@ -58,7 +58,7 @@ _screen_fail() {
 # Print how to recover after a failure that left RF disabled (CFUN=4).
 _recovery_hint() {
     echo "norypt-ghost: RF is OFF (CFUN=4) — the device will not connect until recovered." >&2
-    echo "norypt-ghost: recover by re-running the operation, or 'norypt-ghost restore'," >&2
+    echo "norypt-ghost: recover by re-running the operation," >&2
     echo "norypt-ghost: or force RF on manually: gl_modem -B ${BUS} -U 1 AT 'AT+CFUN=1'" >&2
 }
 
@@ -477,15 +477,6 @@ RANDOMIZE_MACADDR() {
         uci -q set "repeater.@network[0].macaddr=r,${_sta_mac}" 2>/dev/null
         uci commit repeater 2>/dev/null
     fi
-    uci commit wireless
-}
-
-# Re-enable GL-iNet's BSSID randomization (called by norypt-ghost restore).
-RESTORE_RANDOM_BSSID() {
-    local _radio
-    for _radio in wifi0 wifi1 wifi2; do
-        uci -q set "wireless.${_radio}.random_bssid=1" 2>/dev/null
-    done
     uci commit wireless
 }
 
