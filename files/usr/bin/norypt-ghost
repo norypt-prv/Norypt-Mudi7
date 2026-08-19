@@ -166,44 +166,6 @@ _save_factory_state() {
 
     uci -c /etc/config commit norypt-ghost
     echo "norypt-ghost: factory state saved to $FACTORY_CFG"
-
-    _seal_factory_if_requested
-}
-
-# Seal the factory section behind a passphrase, if requested and available.
-# Purely additive: no-op when sealing isn't active, or the section is already
-# sealed, or no passphrase was staged by postinst. When plain, behavior (and
-# the on-disk factory.* keys) is byte-identical to before this function existed.
-_seal_factory_if_requested() {
-    # shellcheck source=/dev/null
-    . /lib/norypt-ghost/seal.sh
-    [ "$(SEAL_MODE)" = "sealed" ] || return 0
-    [ "$(_get_factory sealed)" = "1" ] && return 0
-
-    local pass
-    pass="$(cat /tmp/norypt-ghost.seal-pass 2>/dev/null)"
-    if [ -z "$pass" ]; then
-        logger -t norypt-ghost "seal: no passphrase — leaving plain"
-        return 0
-    fi
-
-    local tmp
-    tmp="/tmp/ng.factory.$$"
-    uci -c /etc/config show norypt-ghost.factory 2>/dev/null | grep -v '\.sealed=' > "$tmp"
-
-    local blob
-    blob="$(SEAL_ENCRYPT "$tmp" "$pass")"
-    rm -f "$tmp" /tmp/norypt-ghost.seal-pass
-
-    local k
-    for k in $(uci -c /etc/config show norypt-ghost.factory 2>/dev/null | sed -n 's/^norypt-ghost\.factory\.\([^=]*\)=.*/\1/p'); do
-        [ "$k" = "sealed" ] && continue
-        uci -c /etc/config delete "norypt-ghost.factory.$k" 2>/dev/null
-    done
-    uci -c /etc/config set norypt-ghost.factory.sealed=1
-    uci -c /etc/config set norypt-ghost.factory.blob="$blob"
-    uci -c /etc/config commit norypt-ghost
-    logger -t norypt-ghost "factory state sealed"
 }
 
 # ── Status ────────────────────────────────────────────────────────────────────

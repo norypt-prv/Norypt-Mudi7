@@ -50,7 +50,6 @@ install -m 0644 "$REPO/files/lib/norypt-ghost/luhn.lua"             "$STAGING/li
 install -m 0644 "$REPO/files/lib/norypt-ghost/profile.sh"           "$STAGING/lib/norypt-ghost/profile.sh"
 install -m 0644 "$REPO/files/lib/norypt-ghost/identity.sh"          "$STAGING/lib/norypt-ghost/identity.sh"
 install -m 0644 "$REPO/files/lib/norypt-ghost/clean.sh"             "$STAGING/lib/norypt-ghost/clean.sh"
-install -m 0644 "$REPO/files/lib/norypt-ghost/seal.sh"              "$STAGING/lib/norypt-ghost/seal.sh"
 
 install -d "$STAGING/usr/bin"
 install -m 0755 "$REPO/files/usr/bin/norypt-ghost"                  "$STAGING/usr/bin/norypt-ghost"
